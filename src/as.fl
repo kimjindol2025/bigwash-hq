@@ -1,0 +1,111 @@
+;; bigwash-as/src/as.fl
+;; v1.0 / 2026-04-09
+;; AS 접수 핸들러
+
+(defmodule as-handler
+  (:use fl-core fl-data)
+  (:export [register list-requests get-request update-status]))
+
+(defn validate-phone [phone]
+  "Validate Korean phone number"
+  (and (string? phone)
+       (>= (len phone) 10)
+       (<= (len phone) 20)))
+
+(defn validate-request-data [data]
+  "Validate AS request data"
+  (let [errors []]
+    (if (not (and (data :customer_name) (string? (data :customer_name))))
+      (conj! errors "customer_name is required"))
+    (if (not (validate-phone (data :customer_phone)))
+      (conj! errors "customer_phone is invalid"))
+    (if (not (and (data :symptom) (string? (data :symptom))))
+      (conj! errors "symptom is required"))
+    (if (empty? errors)
+      {:ok true}
+      {:error (str-join ", " errors)})))
+
+(defn register [req-data]
+  "Register new AS request"
+  (try
+    ;; 입력값 검증
+    (let [validation (validate-request-data req-data)]
+      (if (validation :error)
+        {:error (validation :error) :status 400}
+        (do
+          ;; 고객 정보 upsert
+          (let [customer-result (db/query
+                                  "SELECT id FROM customers WHERE phone = $1"
+                                  [(req-data :customer_phone)])]
+            (let [customer-id (if (empty? (customer-result :ok))
+                               ;; 신규 고객 생성
+                               (let [insert-result (db/insert-one "customers"
+                                                     {:name (req-data :customer_name)
+                                                      :phone (req-data :customer_phone)
+                                                      :address (req-data :address)})]
+                                 (insert-result :ok))
+                               ;; 기존 고객
+                               (((first (customer-result :ok)) :id)))
+                   ]
+              ;; AS 요청 생성
+              (let [as-result (db/insert-one "as_requests"
+                                {:customer_id customer-id
+                                 :customer_name (req-data :customer_name)
+                                 :customer_phone (req-data :customer_phone)
+                                 :equipment_name (req-data :equipment_name)
+                                 :symptom (req-data :symptom)
+                                 :status "received"})]
+                (if (as-result :error)
+                  {:error (as-result :error) :status 500}
+                  ;; 접수 확인 문자 발송
+                  (do
+                    (notify/send-received (as-result :ok) req-data)
+                    {:ok {:id (as-result :ok)
+                          :receipt_no (as-result :ok)
+                          :status "received"}
+                     :status 201})))))))
+    (catch [e]
+      {:error (str "Register failed: " (e :message)) :status 500})))
+
+(defn list-requests []
+  "Get all AS requests"
+  (try
+    (let [result (db/query
+                   "SELECT * FROM as_requests ORDER BY created_at DESC LIMIT 100"
+                   [])]
+      (if (result :error)
+        {:error (result :error) :status 500}
+        {:ok (result :ok) :status 200}))
+    (catch [e]
+      {:error (str "List failed: " (e :message)) :status 500})))
+
+(defn get-request [id]
+  "Get single AS request"
+  (try
+    (let [result (db/query
+                   "SELECT * FROM as_requests WHERE id = $1"
+                   [id])]
+      (if (empty? (result :ok))
+        {:error "Not found" :status 404}
+        {:ok (first (result :ok)) :status 200}))
+    (catch [e]
+      {:error (str "Get failed: " (e :message)) :status 500})))
+
+(defn update-status [id new-status req-data]
+  "Update AS request status and notify customer"
+  (try
+    ;; 상태값 검증
+    (if (not (contains? ["received" "assigned" "in_progress" "done"] new-status))
+      {:error "Invalid status" :status 400}
+      (let [result (db/update-one "as_requests"
+                     id
+                     {:status new-status
+                      :updated_at (current-time)})]
+        (if (result :error)
+          {:error (result :error) :status 500}
+          ;; 상태별 알림 발송
+          (do
+            (notify/send-status-change (req-data :customer_phone) new-status req-data)
+            {:ok {:status new-status} :status 200}))))
+    (catch [e]
+      {:error (str "Update failed: " (e :message)) :status 500})))

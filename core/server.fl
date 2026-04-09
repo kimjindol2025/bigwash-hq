@@ -1,0 +1,86 @@
+;; bigwash-as/core/server.fl
+;; v1.0 / 2026-04-09
+;; HTTP 서버 메인 루프
+
+(defmodule server
+  (:use fl-core fl-data)
+  (:require [../src/db :as db]
+            [../src/auth :as auth]
+            [../src/as :as as-handler]
+            [../src/notify :as notify]
+            [../src/router :as router]))
+
+;; 글로벌 설정
+(def *port* (str->num (env "PORT" "3000")))
+(def *db-url* (env "DATABASE_URL" "postgresql://localhost/bigwash_as"))
+(def *debug* (env "DEBUG" "false"))
+
+;; DB 연결
+(defn init-db []
+  "Initialize database connection"
+  (try
+    (let [conn (pg/connect *db-url*)]
+      (set! *db-conn* conn)
+      {:ok "Database connected"})
+    (catch [e]
+      {:error (str "DB init failed: " (e :message))})))
+
+;; HTTP 요청 핸들러
+(defn handle-request [req]
+  "Handle incoming HTTP request"
+  (try
+    (let [method (req :method)
+          path (req :path)
+          url-obj (url/parse (req :url))]
+      (let [clean-path (url-obj :pathname)]
+        (if *debug*
+          (do
+            (console/log (str "[" method "] " clean-path))
+            (console/log (str "Headers: " (json/stringify (req :headers))))))
+        (router/route-request method clean-path req)))
+    (catch [e]
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (json/stringify {:error (str "Internal error: " (e :message))})})))
+
+;; 서버 시작
+(defn start []
+  "Start HTTP server"
+  (try
+    ;; DB 초기화
+    (let [db-init (init-db)]
+      (if (db-init :error)
+        (do
+          (console/error (str "Failed to initialize database: " (db-init :error)))
+          (process/exit 1))))
+
+    ;; HTTP 서버 시작
+    (http/create-server handle-request)
+      |> (fn [server]
+        (server/listen *port* (fn []
+          (console/log (str "[bigwash-as] Server running on port " *port*))
+          (console/log (str "[bigwash-as] ENV: " (env "NODE_ENV" "development")))
+          (console/log "[bigwash-as] Ready to receive AS requests"))))
+
+    (catch [e]
+      (do
+        (console/error (str "Failed to start server: " (e :message)))
+        (process/exit 1)))))
+
+;; Graceful shutdown
+(defn setup-shutdown []
+  "Setup graceful shutdown handlers"
+  (process/on "SIGTERM" (fn []
+    (console/log "[bigwash-as] SIGTERM received, shutting down...")
+    (pg/close *db-conn*)
+    (process/exit 0)))
+  (process/on "SIGINT" (fn []
+    (console/log "[bigwash-as] SIGINT received, shutting down...")
+    (pg/close *db-conn*)
+    (process/exit 0))))
+
+;; 진입점
+(if (= (current-module) "server")
+  (do
+    (setup-shutdown)
+    (start)))

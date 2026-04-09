@@ -1,0 +1,107 @@
+;; bigwash-as/src/notify.fl
+;; v1.0 / 2026-04-09
+;; 문자/카카오 알림 발송
+
+(defmodule notify
+  (:use fl-core fl-data)
+  (:export [send-received send-status-change send-admin-alert]))
+
+(def *sms-gateway* (env "SMS_GATEWAY_URL" "https://api.sms-provider.kr/send"))
+(def *sms-api-key* (env "SMS_API_KEY" ""))
+(def *admin-phone* (env "ADMIN_PHONE" "031-1688-7759"))
+(def *business-phone* (env "BUSINESS_PHONE" "010-0000-0000"))
+
+(defn build-receipt-message [receipt-no customer-name symptom]
+  "Build SMS message for receipt confirmation"
+  (str "[빅워시] 접수번호 #" receipt-no "\n"
+       customer-name "님 AS 접수 완료\n"
+       "증상: " symptom "\n"
+       "처리 예정: 평일 09:00~17:00\n"
+       "문의: 031-1688-7759"))
+
+(defn build-status-message [receipt-no status]
+  "Build SMS message for status change"
+  (cond
+    (= status "assigned")
+      (str "[빅워시] #" receipt-no "\n담당자가 배정되었습니다.")
+    (= status "in_progress")
+      (str "[빅워시] #" receipt-no "\n담당자가 출동 중입니다.\n도착 예정시간 별도 안내드립니다.")
+    (= status "done")
+      (str "[빅워시] #" receipt-no "\nAS가 완료되었습니다.\n이용해 주셔서 감사합니다.")
+    :else
+      (str "[빅워시] #" receipt-no "\n상태: " status)))
+
+(defn build-admin-alert [customer-name customer-phone equipment-name symptom receipt-no]
+  "Build SMS message for admin alert"
+  (str "[빅워시 신규 AS]\n"
+       "고객: " customer-name " " customer-phone "\n"
+       "장비: " (or equipment-name "미입력") "\n"
+       "증상: " symptom "\n"
+       "접수번호: #" receipt-no))
+
+(defn send-sms [phone message]
+  "Send SMS via gateway (stub implementation)"
+  (try
+    (let [payload {:to phone
+                   :message message
+                   :from *business-phone*}]
+      ;; 실제 구현에서는 HTTP 요청
+      ;; (http/post *sms-gateway* payload)
+      {:ok {:phone phone :status "sent"} :message message})
+    (catch [e]
+      {:error (str "SMS send failed: " (e :message))})))
+
+(defn log-notification [as-request-id phone content channel]
+  "Log notification to database"
+  (try
+    (db/insert-one "notifications"
+      {:as_request_id as-request-id
+       :customer_phone phone
+       :content content
+       :channel channel
+       :status "pending"})
+    (catch [e]
+      {:error (str "Log failed: " (e :message))})))
+
+(defn send-received [as-request-id req-data]
+  "Send receipt confirmation SMS"
+  (try
+    (let [receipt-no (as-request-id)
+          message (build-receipt-message receipt-no
+                                        (req-data :customer_name)
+                                        (req-data :symptom))]
+      ;; 문자 발송
+      (let [sms-result (send-sms (req-data :customer_phone) message)]
+        ;; 로그 기록
+        (log-notification as-request-id
+                         (req-data :customer_phone)
+                         message
+                         "sms")
+        ;; 관리자 알림
+        (send-admin-alert req-data receipt-no)
+        {:ok true}))
+    (catch [e]
+      {:error (str "Send received failed: " (e :message))})))
+
+(defn send-status-change [customer-phone new-status req-data]
+  "Send status change notification"
+  (try
+    (let [message (build-status-message (req-data :id) new-status)]
+      ;; 문자 발송
+      (send-sms customer-phone message)
+      {:ok true})
+    (catch [e]
+      {:error (str "Send status change failed: " (e :message))})))
+
+(defn send-admin-alert [req-data receipt-no]
+  "Send alert to admin about new AS"
+  (try
+    (let [message (build-admin-alert (req-data :customer_name)
+                                    (req-data :customer_phone)
+                                    (req-data :equipment_name)
+                                    (req-data :symptom)
+                                    receipt-no)]
+      (send-sms *admin-phone* message)
+      {:ok true})
+    (catch [e]
+      {:error (str "Send admin alert failed: " (e :message))})))

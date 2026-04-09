@@ -1,0 +1,97 @@
+;; bigwash-as/src/router.fl
+;; v1.0 / 2026-04-09
+;; HTTP 라우팅
+
+(defmodule router
+  (:use fl-core fl-data)
+  (:export [route-request]))
+
+(defn require-auth [req]
+  "Require JWT token in Authorization header"
+  (let [auth-header (get (req :headers) "authorization")]
+    (if (not auth-header)
+      {:error "Missing authorization header" :status 401}
+      (let [token (str-replace auth-header "Bearer " "")]
+        (let [verified (auth/verify-token token)]
+          (if (not verified)
+            {:error "Invalid token" :status 401}
+            {:ok verified}))))))
+
+(defn response [body status]
+  "Build HTTP response"
+  {:body body
+   :status status
+   :headers {"Content-Type" "application/json"}})
+
+(defn json-response [data status]
+  "Build JSON response"
+  (response (json/stringify data) status))
+
+(defn parse-body [req]
+  "Parse JSON request body"
+  (try
+    (json/parse (req :body))
+    (catch [e]
+      nil)))
+
+(defn route-request [method path req]
+  "Route HTTP request to handler"
+  (cond
+    ;; GET /health
+    (and (= method "GET") (= path "/health"))
+      (json-response {:status "ok" :timestamp (current-time)} 200)
+
+    ;; POST /as/register
+    (and (= method "POST") (= path "/as/register"))
+      (let [body (parse-body req)]
+        (if (not body)
+          (json-response {:error "Invalid JSON"} 400)
+          (let [result (as-handler/register body)]
+            (json-response (or (result :ok) {:error (result :error)})
+                          (result :status 500)))))
+
+    ;; GET /as/list
+    (and (= method "GET") (= path "/as/list"))
+      (let [auth-check (require-auth req)]
+        (if (auth-check :error)
+          (json-response {:error (auth-check :error)} (auth-check :status))
+          (let [result (as-handler/list-requests)]
+            (json-response (or (result :ok) {:error (result :error)})
+                          (result :status 500)))))
+
+    ;; GET /as/:id
+    (and (= method "GET") (str-starts-with? path "/as/"))
+      (let [auth-check (require-auth req)]
+        (if (auth-check :error)
+          (json-response {:error (auth-check :error)} (auth-check :status))
+          (let [id (str-replace path "/as/" "")
+                result (as-handler/get-request id)]
+            (json-response (or (result :ok) {:error (result :error)})
+                          (result :status 500)))))
+
+    ;; PUT /as/:id/status
+    (and (= method "PUT") (str-contains? path "/as/") (str-ends-with? path "/status"))
+      (let [auth-check (require-auth req)]
+        (if (auth-check :error)
+          (json-response {:error (auth-check :error)} (auth-check :status))
+          (let [id (second (str-split path "/"))
+                body (parse-body req)]
+            (if (not (body :status))
+              (json-response {:error "status is required"} 400)
+              (let [result (as-handler/update-status id (body :status) body)]
+                (json-response (or (result :ok) {:error (result :error)})
+                              (result :status 500)))))))
+
+    ;; POST /admin/login
+    (and (= method "POST") (= path "/admin/login"))
+      (let [body (parse-body req)]
+        (if (not (and (body :username) (body :password)))
+          (json-response {:error "username and password required"} 400)
+          (let [result (auth/admin-login (body :username) (body :password))]
+            (if (result :error)
+              (json-response {:error (result :error)} 401)
+              (json-response (result :ok) 200)))))
+
+    ;; 404
+    :else
+      (json-response {:error "Not found"} 404)))

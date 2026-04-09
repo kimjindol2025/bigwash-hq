@@ -1,0 +1,54 @@
+;; bigwash-as/src/auth.fl
+;; v1.0 / 2026-04-09
+;; JWT 인증 관리
+
+(defmodule auth
+  (:use fl-core fl-data)
+  (:export [generate-token verify-token admin-login hash-password]))
+
+(def *secret-key* (or (env "JWT_SECRET") "bigwash-secret-key-2026"))
+(def *token-expiry* 86400) ;; 24시간
+
+(defn hash-password [password]
+  "Simple password hash (실제로는 bcrypt 사용)"
+  (let [salt (env "PASSWORD_SALT" "bigwash-salt")]
+    (str-sha256 (str password salt))))
+
+(defn generate-token [admin-id username]
+  "Generate JWT token for admin"
+  (try
+    (let [now (current-time)
+          expiry (+ now *token-expiry*)
+          payload {:admin_id admin-id
+                   :username username
+                   :iat now
+                   :exp expiry}]
+      (jwt/sign payload *secret-key* "HS256"))
+    (catch [e]
+      nil)))
+
+(defn verify-token [token]
+  "Verify JWT token and extract payload"
+  (try
+    (jwt/verify token *secret-key* "HS256")
+    (catch [e]
+      nil)))
+
+(defn admin-login [username password]
+  "Authenticate admin and return token"
+  (try
+    ;; DB에서 관리자 조회
+    (let [result (db/query
+                   "SELECT id, password_hash FROM admins WHERE username = $1"
+                   [username])]
+      (if (empty? (result :ok))
+        {:error "Invalid username"}
+        (let [admin (first (result :ok))
+              stored-hash (admin :password_hash)
+              input-hash (hash-password password)]
+          (if (= stored-hash input-hash)
+            {:ok {:token (generate-token (admin :id) username)
+                  :admin_id (admin :id)}}
+            {:error "Invalid password"}))))
+    (catch [e]
+      {:error (str "Login failed: " (e :message))})))

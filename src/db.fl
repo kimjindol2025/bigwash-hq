@@ -1,0 +1,52 @@
+;; bigwash-as/src/db.fl
+;; v1.0 / 2026-04-09
+;; PostgreSQL 래퍼
+
+(defmodule db
+  (:use fl-core fl-data)
+  (:export [query execute insert-one update-one delete-one]))
+
+(defn query [sql params]
+  "Execute SELECT query and return results"
+  (try
+    (let [result (pg/query *db-conn* sql params)]
+      {:ok result})
+    (catch [e]
+      {:error (str "Query failed: " (e :message))})))
+
+(defn execute [sql params]
+  "Execute INSERT/UPDATE/DELETE and return affected rows"
+  (try
+    (let [result (pg/execute *db-conn* sql params)]
+      {:ok (result :rowCount)})
+    (catch [e]
+      {:error (str "Execute failed: " (e :message))})))
+
+(defn insert-one [table data]
+  "Insert one record and return ID"
+  (try
+    (let [keys (keys data)
+          values (map #(data %) keys)
+          placeholders (str-join "," (map #(str "$" (+ (idx %) 1)) (range (len keys))))
+          sql (str "INSERT INTO " table " (" (str-join "," keys) ") VALUES (" placeholders ") RETURNING id")]
+      (let [result (pg/query *db-conn* sql values)]
+        (if (empty? result)
+          {:error "Insert failed"}
+          {:ok ((first result) :id)})))
+    (catch [e]
+      {:error (str "Insert failed: " (e :message))})))
+
+(defn update-one [table id data]
+  "Update one record by ID"
+  (try
+    (let [keys (keys data)
+          values (concat (map #(data %) keys) [id])
+          set-clause (str-join "," (map #(str % "=$" (+ (idx %) 1)) keys))
+          sql (str "UPDATE " table " SET " set-clause " WHERE id=$" (+ (len keys) 1))]
+      (execute sql values))
+    (catch [e]
+      {:error (str "Update failed: " (e :message))})))
+
+(defn delete-one [table id]
+  "Delete one record by ID"
+  (execute (str "DELETE FROM " table " WHERE id=$1") [id]))
