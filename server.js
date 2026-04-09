@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,8 @@ const TOKEN_EXPIRY = 86400; // 24시간
 const store = {
   customers: {},
   asRequests: {},
+  schedules: {},
+  photos: {},
   notifications: [],
   admins: {
     admin: {
@@ -30,9 +33,32 @@ const store = {
   }
 };
 
+// 파일 업로드 설정
+const uploadDir = path.join(__dirname, 'uploads', 'photos');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}${ext}`;
+    cb(null, name);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
+
 // 미들웨어
 app.use(express.json());
 app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
 
 // 헬퍼 함수
 function generateId() {
@@ -220,6 +246,110 @@ app.put('/as/:id/status', requireAuth, (req, res) => {
   }
 
   res.json({ status, updated_at: request.updated_at });
+});
+
+// POST /as/:id/schedule - 스케줄 등록
+app.post('/as/:id/schedule', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { scheduled_date, scheduled_time, technician_id, address, notes } = req.body;
+
+  const request = store.asRequests[id];
+  if (!request) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // 검증
+  if (!scheduled_date || !scheduled_time) {
+    return res.status(400).json({ error: 'scheduled_date and scheduled_time are required' });
+  }
+
+  const scheduleId = `schedule-${id}`;
+  const schedule = {
+    id: scheduleId,
+    as_request_id: id,
+    scheduled_date,
+    scheduled_time,
+    technician_id: technician_id || 'unassigned',
+    address: address || request.address || '',
+    notes: notes || '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  store.schedules[scheduleId] = schedule;
+  request.scheduled_date = scheduled_date;
+  request.scheduled_time = scheduled_time;
+  request.updated_at = new Date().toISOString();
+
+  res.status(201).json({
+    id: scheduleId,
+    scheduled_date,
+    scheduled_time,
+    technician_id: schedule.technician_id
+  });
+});
+
+// GET /as/:id/schedule - 스케줄 조회
+app.get('/as/:id/schedule', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const scheduleId = `schedule-${id}`;
+  const schedule = store.schedules[scheduleId];
+
+  if (!schedule) {
+    return res.status(404).json({ error: 'Schedule not found' });
+  }
+
+  res.json(schedule);
+});
+
+// POST /as/:id/photo - 사진 업로드
+app.post('/as/:id/photo', requireAuth, upload.single('photo'), (req, res) => {
+  const { id } = req.params;
+  const { photo_type } = req.body; // 'before' 또는 'after'
+
+  const request = store.asRequests[id];
+  if (!request) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No photo uploaded' });
+  }
+
+  if (!photo_type || !['before', 'after'].includes(photo_type)) {
+    return res.status(400).json({ error: 'photo_type must be "before" or "after"' });
+  }
+
+  const photoId = `photo-${id}-${photo_type}-${Date.now()}`;
+  const photo = {
+    id: photoId,
+    as_request_id: id,
+    photo_type,
+    file_path: `/uploads/photos/${req.file.filename}`,
+    original_name: req.file.originalname,
+    file_size: req.file.size,
+    uploaded_at: new Date().toISOString()
+  };
+
+  store.photos[photoId] = photo;
+  request.updated_at = new Date().toISOString();
+
+  res.status(201).json({
+    id: photoId,
+    photo_type,
+    file_path: photo.file_path,
+    uploaded_at: photo.uploaded_at
+  });
+});
+
+// GET /as/:id/photos - 사진 목록
+app.get('/as/:id/photos', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const photos = Object.values(store.photos)
+    .filter(p => p.as_request_id === id)
+    .sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+
+  res.json(photos);
 });
 
 // 정적 파일 서빙

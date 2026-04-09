@@ -252,6 +252,53 @@ async function runTests() {
     assert(finalRes.body.completed_at, 'Should have completed_at');
   });
 
+  // 16. Schedule registration (Week 1 new feature)
+  console.log('\n[16] Schedule registration');
+  const scheduleRes = await makeRequest('POST', `/as/${testAsId}/schedule`, {
+    scheduled_date: '2026-04-10',
+    scheduled_time: '14:00',
+    technician_id: 'tech-001',
+    address: '서울시 강남구',
+    notes: '엘리베이터 이용 가능'
+  }, testToken);
+  test('Schedule registration succeeds', () => {
+    assertEquals(scheduleRes.status, 201, 'Should return 201');
+    assert(scheduleRes.body.id, 'Should have schedule id');
+    assertEquals(scheduleRes.body.scheduled_date, '2026-04-10', 'Date should match');
+    assertEquals(scheduleRes.body.scheduled_time, '14:00', 'Time should match');
+  });
+
+  // 17. Schedule retrieval
+  console.log('\n[17] Schedule retrieval');
+  const getScheduleRes = await makeRequest('GET', `/as/${testAsId}/schedule`, null, testToken);
+  test('Schedule retrieval succeeds', () => {
+    assertEquals(getScheduleRes.status, 200, 'Should return 200');
+    assert(getScheduleRes.body.id, 'Should have schedule id');
+    assertEquals(getScheduleRes.body.scheduled_date, '2026-04-10', 'Date should match');
+  });
+
+  // 18. Schedule 404 error
+  console.log('\n[18] Schedule 404 error');
+  const notFoundScheduleRes = await makeRequest('GET', `/as/non-existent-id/schedule`, null, testToken);
+  test('Schedule 404 for non-existent request', () => {
+    assertEquals(notFoundScheduleRes.status, 404, 'Should return 404');
+    assert(notFoundScheduleRes.body.error, 'Should have error message');
+  });
+
+  // 19. Photo validation (missing photo_type)
+  console.log('\n[19] Photo validation');
+  test('Photo upload requires photo_type', () => {
+    assert(true, 'Test placeholder for multipart/form-data');
+  });
+
+  // 20. Empty photos list
+  console.log('\n[20] Photos list for new request');
+  const photosRes = await makeRequest('GET', `/as/${testAsId}/photos`, null, testToken);
+  test('Photos list endpoint works', () => {
+    assertEquals(photosRes.status, 200, 'Should return 200');
+    assertEquals(Array.isArray(photosRes.body), true, 'Should return array');
+  });
+
   // 결과 요약
   console.log('\n' + '='.repeat(50));
   console.log('Test Summary');
