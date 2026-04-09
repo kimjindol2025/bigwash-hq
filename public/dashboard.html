@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>빅워시 AS - 관리자 대시보드</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    header h1 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 24px;
+    }
+
+    header p {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-top: 5px;
+    }
+
+    .header-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 15px;
+      gap: 10px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 12px;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-top: 5px;
+    }
+
+    .logout-btn {
+      background: rgba(255, 255, 255, 0.3);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      padding: 8px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .logout-btn:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 0 20px;
+    }
+
+    .filters {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 8px 15px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+
+    .filter-btn:hover {
+      border-color: #667eea;
+    }
+
+    .refresh-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-left: auto;
+      font-size: 14px;
+    }
+
+    .refresh-btn:hover {
+      background: #764ba2;
+    }
+
+    .as-list {
+      display: grid;
+      gap: 15px;
+    }
+
+    .as-card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      border-left: 4px solid #667eea;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .as-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .as-card.received {
+      border-left-color: #ff6b6b;
+    }
+
+    .as-card.assigned {
+      border-left-color: #ffa500;
+    }
+
+    .as-card.in_progress {
+      border-left-color: #4ecdc4;
+    }
+
+    .as-card.done {
+      border-left-color: #51cf66;
+    }
+
+    .as-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 15px;
+    }
+
+    .as-receipt {
+      font-size: 12px;
+      color: #999;
+      font-weight: 600;
+    }
+
+    .as-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .status-received {
+      background: #ff6b6b;
+    }
+
+    .status-assigned {
+      background: #ffa500;
+    }
+
+    .status-in_progress {
+      background: #4ecdc4;
+    }
+
+    .status-done {
+      background: #51cf66;
+    }
+
+    .as-content {
+      margin-bottom: 15px;
+    }
+
+    .as-customer {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .as-phone {
+      font-size: 14px;
+      color: #667eea;
+      margin-bottom: 5px;
+    }
+
+    .as-symptom {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .as-meta {
+      display: flex;
+      gap: 20px;
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 15px;
+    }
+
+    .as-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .status-btn {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .status-btn:hover {
+      background: #f5f5f5;
+      border-color: #667eea;
+    }
+
+    .status-btn.primary {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #667eea;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-header {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .form-group select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .modal-btn-cancel {
+      background: #ddd;
+      color: #333;
+    }
+
+    .modal-btn-submit {
+      background: #667eea;
+      color: white;
+    }
+
+    .modal-btn-submit:hover {
+      background: #764ba2;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      background: #667eea;
+      color: white;
+      border-radius: 5px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      display: none;
+      z-index: 2000;
+    }
+
+    .toast.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .as-header {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .filters {
+        flex-direction: column;
+      }
+
+      .refresh-btn {
+        margin-left: 0;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🧼 빅워시 AS 현황</h1>
+    <p id="dateTime"></p>
+    <div class="header-actions">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="statReceived">0</div>
+          <div class="stat-label">신규</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statAssigned">0</div>
+          <div class="stat-label">배정</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statProgress">0</div>
+          <div class="stat-label">진행중</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="statDone">0</div>
+          <div class="stat-label">완료</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="logout()">로그아웃</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="filters">
+      <button class="filter-btn active" onclick="filterByStatus('all')">전체</button>
+      <button class="filter-btn" onclick="filterByStatus('received')">신규 (received)</button>
+      <button class="filter-btn" onclick="filterByStatus('assigned')">배정 (assigned)</button>
+      <button class="filter-btn" onclick="filterByStatus('in_progress')">진행중 (in_progress)</button>
+      <button class="filter-btn" onclick="filterByStatus('done')">완료 (done)</button>
+      <button class="refresh-btn" onclick="loadRequests()">🔄 새로고침</button>
+    </div>
+
+    <div class="as-list" id="asList">
+      <div class="loading">로딩 중...</div>
+    </div>
+  </div>
+
+  <!-- 상태 변경 모달 -->
+  <div class="modal" id="statusModal">
+    <div class="modal-content">
+      <div class="modal-header">상태 변경</div>
+      <div class="form-group">
+        <label for="newStatus">새로운 상태</label>
+        <select id="newStatus">
+          <option value="received">신규 (received)</option>
+          <option value="assigned">배정 (assigned)</option>
+          <option value="in_progress">진행중 (in_progress)</option>
+          <option value="done">완료 (done)</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" onclick="closeStatusModal()">취소</button>
+        <button class="modal-btn modal-btn-submit" onclick="submitStatusChange()">변경</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let currentFilter = 'all';
+    let allRequests = [];
+    let selectedRequestId = null;
+
+    // 초기화
+    async function init() {
+      // 로그인 확인
+      if (!localStorage.getItem('token')) {
+        window.location.href = '/admin/login.html';
+        return;
+      }
+
+      updateDateTime();
+      setInterval(updateDateTime, 1000);
+
+      await loadRequests();
+      setInterval(loadRequests, 30000); // 30초마다 새로고침
+    }
+
+    function updateDateTime() {
+      const now = new Date();
+      const formatter = new Intl.DateTimeFormat('ko-KR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('dateTime').textContent = formatter.format(now);
+    }
+
+    async function loadRequests() {
+      const token = localStorage.getItem('token');
+
+      try {
+        const response = await fetch('/as/list', {
+          headers: {
+            'Authorization': 'Bearer ' + token
+          }
+        });
+
+        if (response.status === 401) {
+          localStorage.clear();
+          window.location.href = '/admin/login.html';
+          return;
+        }
+
+        const data = await response.json();
+        allRequests = Array.isArray(data) ? data : [];
+
+        updateStats();
+        renderRequests();
+      } catch (error) {
+        showToast('❌ 로드 실패: ' + error.message);
+        console.error(error);
+      }
+    }
+
+    function updateStats() {
+      const stats = {
+        received: allRequests.filter(r => r.status === 'received').length,
+        assigned: allRequests.filter(r => r.status === 'assigned').length,
+        in_progress: allRequests.filter(r => r.status === 'in_progress').length,
+        done: allRequests.filter(r => r.status === 'done').length
+      };
+
+      document.getElementById('statReceived').textContent = stats.received;
+      document.getElementById('statAssigned').textContent = stats.assigned;
+      document.getElementById('statProgress').textContent = stats.in_progress;
+      document.getElementById('statDone').textContent = stats.done;
+    }
+
+    function filterByStatus(status) {
+      currentFilter = status;
+
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      renderRequests();
+    }
+
+    function renderRequests() {
+      const asList = document.getElementById('asList');
+
+      let filtered = allRequests;
+      if (currentFilter !== 'all') {
+        filtered = allRequests.filter(r => r.status === currentFilter);
+      }
+
+      if (filtered.length === 0) {
+        asList.innerHTML = '<div class="empty">AS 요청이 없습니다.</div>';
+        return;
+      }
+
+      asList.innerHTML = filtered.map(req => `
+        <div class="as-card ${req.status}">
+          <div class="as-header">
+            <div>
+              <div class="as-receipt">접수번호 #${req.id?.substring(0, 8) || 'N/A'}</div>
+            </div>
+            <span class="as-status status-${req.status}">${getStatusLabel(req.status)}</span>
+          </div>
+          <div class="as-content">
+            <div class="as-customer">👤 ${req.customer_name}</div>
+            <div class="as-phone">📱 ${req.customer_phone}</div>
+            <div class="as-symptom">⚙️ ${req.symptom}</div>
+            ${req.equipment_name ? `<div class="as-symptom">🔧 장비: ${req.equipment_name}</div>` : ''}
+          </div>
+          <div class="as-meta">
+            <span>📅 ${formatDate(req.created_at)}</span>
+            ${req.completed_at ? `<span>✅ 완료: ${formatDate(req.completed_at)}</span>` : ''}
+          </div>
+          <div class="as-actions">
+            ${req.status !== 'done' ? `
+              <button class="status-btn primary" onclick="openStatusModal('${req.id}')">
+                상태 변경
+              </button>
+            ` : ''}
+            <button class="status-btn" onclick="copyPhone('${req.customer_phone}')">
+              📋 전화번호 복사
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function getStatusLabel(status) {
+      const labels = {
+        'received': '신규',
+        'assigned': '배정',
+        'in_progress': '진행중',
+        'done': '완료'
+      };
+      return labels[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      const formatter = new Intl.DateTimeFormat('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      return formatter.format(date);
+    }
+
+    function openStatusModal(requestId) {
+      selectedRequestId = requestId;
+      document.getElementById('statusModal').classList.add('show');
+    }
+
+    function closeStatusModal() {
+      document.getElementById('statusModal').classList.remove('show');
+      selectedRequestId = null;
+    }
+
+    async function submitStatusChange() {
+      if (!selectedRequestId) return;
+
+      const newStatus = document.getElementById('newStatus').value;
+      const token = localStorage.getItem('token');
+
+      try {
+        const response = await fetch(`/as/${selectedRequestId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: newStatus })
+        });
+
+        if (response.ok) {
+          showToast(`✅ 상태 변경됨: ${getStatusLabel(newStatus)}`);
+          closeStatusModal();
+          await loadRequests();
+        } else {
+          const data = await response.json();
+          showToast('❌ ' + (data.error || '변경 실패'));
+        }
+      } catch (error) {
+        showToast('❌ 오류: ' + error.message);
+      }
+    }
+
+    function copyPhone(phone) {
+      navigator.clipboard.writeText(phone).then(() => {
+        showToast('📋 전화번호 복사됨');
+      });
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    function logout() {
+      if (confirm('정말 로그아웃하시겠습니까?')) {
+        localStorage.clear();
+        window.location.href = '/admin/login.html';
+      }
+    }
+
+    // 모달 외부 클릭 시 닫기
+    document.getElementById('statusModal').addEventListener('click', (e) => {
+      if (e.target.id === 'statusModal') {
+        closeStatusModal();
+      }
+    });
+
+    // 페이지 로드
+    init();
+  </script>
+</body>
+</html>

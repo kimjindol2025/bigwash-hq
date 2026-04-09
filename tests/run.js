@@ -138,6 +138,22 @@ test('deploy script exists', () => {
   assert(fs.existsSync(deployPath), 'deploy.sh not found');
 });
 
+test('login.html exists', () => {
+  const loginPath = path.join(__dirname, '../public/login.html');
+  assert(fs.existsSync(loginPath), 'public/login.html not found');
+  const content = fs.readFileSync(loginPath, 'utf8');
+  assert(content.includes('빅워시'), '빅워시 텍스트 not found');
+  assert(content.includes('로그인'), '로그인 텍스트 not found');
+});
+
+test('dashboard.html exists', () => {
+  const dashPath = path.join(__dirname, '../public/dashboard.html');
+  assert(fs.existsSync(dashPath), 'public/dashboard.html not found');
+  const content = fs.readFileSync(dashPath, 'utf8');
+  assert(content.includes('대시보드'), '대시보드 텍스트 not found');
+  assert(content.includes('상태 변경'), '상태 변경 텍스트 not found');
+});
+
 test('migrate script exists', () => {
   const migratePath = path.join(__dirname, '../scripts/migrate.js');
   assert(fs.existsSync(migratePath), 'migrate.js not found');

@@ -8,7 +8,8 @@
             [../src/auth :as auth]
             [../src/as :as as-handler]
             [../src/notify :as notify]
-            [../src/router :as router]))
+            [../src/router :as router]
+            [fs]))
 
 ;; 글로벌 설정
 (def *port* (str->num (env "PORT" "3000")))
@@ -25,6 +26,30 @@
     (catch [e]
       {:error (str "DB init failed: " (e :message))})))
 
+;; 정적 파일 서빙
+(defn serve-static [file-path]
+  "Serve static file"
+  (try
+    (let [full-path (str (process/cwd) "/public" file-path)]
+      (if (fs/exists-sync full-path)
+        (let [content (fs/read-file-sync full-path)]
+          (let [mime-type (cond
+                           (str-ends-with? file-path ".html") "text/html; charset=utf-8"
+                           (str-ends-with? file-path ".css") "text/css"
+                           (str-ends-with? file-path ".js") "application/javascript"
+                           (str-ends-with? file-path ".json") "application/json"
+                           :else "text/plain")]
+            {:status 200
+             :headers {"Content-Type" mime-type}
+             :body content}))
+        {:status 404
+         :headers {"Content-Type" "application/json"}
+         :body (json/stringify {:error "Not found"})}))
+    (catch [e]
+      {:status 500
+       :headers {"Content-Type" "application/json"}
+       :body (json/stringify {:error (str "File error: " (e :message))})})))
+
 ;; HTTP 요청 핸들러
 (defn handle-request [req]
   "Handle incoming HTTP request"
@@ -37,7 +62,20 @@
           (do
             (console/log (str "[" method "] " clean-path))
             (console/log (str "Headers: " (json/stringify (req :headers))))))
-        (router/route-request method clean-path req)))
+
+        ;; 정적 파일 확인
+        (cond
+          (or (= clean-path "/") (= clean-path "/admin"))
+            (serve-static "/login.html")
+          (= clean-path "/admin/login.html")
+            (serve-static "/login.html")
+          (= clean-path "/admin/dashboard.html")
+            (serve-static "/dashboard.html")
+          (str-starts-with? clean-path "/public/")
+            (serve-static (str-replace clean-path "/public" ""))
+          :else
+            ;; API 라우팅
+            (router/route-request method clean-path req))))
     (catch [e]
       {:status 500
        :headers {"Content-Type" "application/json"}
