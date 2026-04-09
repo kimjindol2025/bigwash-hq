@@ -10,7 +10,8 @@
     "migrate": "node scripts/migrate.js",
     "test": "node tests/run.js",
     "test:integration": "node tests/integration.js",
-    "test:all": "npm run test && npm run test:integration",
+    "test:e2e": "node tests/e2e.js",
+    "test:all": "npm run test && npm run test:integration && npm run test:e2e",
     "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
