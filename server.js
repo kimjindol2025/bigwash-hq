@@ -21,6 +21,8 @@ const store = {
   asRequests: {},
   schedules: {},
   photos: {},
+  serviceLogs: {},
+  partsList: {},
   notifications: [],
   admins: {
     admin: {
@@ -350,6 +352,99 @@ app.get('/as/:id/photos', requireAuth, (req, res) => {
     .sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
 
   res.json(photos);
+});
+
+// PUT /as/:id/service-log - 서비스 일지 기록
+app.put('/as/:id/service-log', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { work_description, parts_used, labor_time, notes } = req.body;
+
+  const request = store.asRequests[id];
+  if (!request) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  // 검증
+  if (!work_description) {
+    return res.status(400).json({ error: 'work_description is required' });
+  }
+
+  const serviceLogId = `service-log-${id}-${Date.now()}`;
+  const serviceLog = {
+    id: serviceLogId,
+    as_request_id: id,
+    work_description,
+    labor_time: labor_time || 0,
+    notes: notes || '',
+    recorded_at: new Date().toISOString()
+  };
+
+  store.serviceLogs[serviceLogId] = serviceLog;
+
+  // 부품 기록
+  if (parts_used && Array.isArray(parts_used)) {
+    parts_used.forEach((part, idx) => {
+      const partId = `part-${serviceLogId}-${idx}`;
+      store.partsList[partId] = {
+        id: partId,
+        service_log_id: serviceLogId,
+        part_name: part.name || '',
+        quantity: part.quantity || 1,
+        unit_price: part.price || 0,
+        total_price: (part.quantity || 1) * (part.price || 0)
+      };
+    });
+  }
+
+  request.service_log_id = serviceLogId;
+  request.updated_at = new Date().toISOString();
+
+  res.json({
+    id: serviceLogId,
+    work_description,
+    labor_time,
+    parts_count: parts_used ? parts_used.length : 0,
+    recorded_at: serviceLog.recorded_at
+  });
+});
+
+// GET /as/:id/service-log - 서비스 일지 조회
+app.get('/as/:id/service-log', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const serviceLogs = Object.values(store.serviceLogs)
+    .filter(log => log.as_request_id === id)
+    .sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at));
+
+  if (serviceLogs.length === 0) {
+    return res.json(null);
+  }
+
+  const latestLog = serviceLogs[0];
+  const parts = Object.values(store.partsList)
+    .filter(p => p.service_log_id === latestLog.id);
+
+  res.json({
+    ...latestLog,
+    parts_used: parts
+  });
+});
+
+// GET /as/:id/service-logs - 모든 서비스 일지 목록
+app.get('/as/:id/service-logs', requireAuth, (req, res) => {
+  const { id } = req.params;
+  const serviceLogs = Object.values(store.serviceLogs)
+    .filter(log => log.as_request_id === id)
+    .sort((a, b) => new Date(b.recorded_at) - new Date(a.recorded_at))
+    .map(log => {
+      const parts = Object.values(store.partsList)
+        .filter(p => p.service_log_id === log.id);
+      return {
+        ...log,
+        parts_used: parts
+      };
+    });
+
+  res.json(serviceLogs);
 });
 
 // 정적 파일 서빙

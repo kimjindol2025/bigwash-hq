@@ -299,6 +299,70 @@ async function runTests() {
     assertEquals(Array.isArray(photosRes.body), true, 'Should return array');
   });
 
+  // 21. Service log - record work (Week 2)
+  console.log('\n[21] Service log recording');
+  const serviceLogRes = await makeRequest('PUT', `/as/${testAsId}/service-log`, {
+    work_description: '냉각수 교체, 필터 청소',
+    labor_time: 1.5,
+    parts_used: [
+      { name: '냉각수', quantity: 2, price: 15000 },
+      { name: '필터', quantity: 1, price: 8000 }
+    ],
+    notes: '추가 이상 없음'
+  }, testToken);
+  test('Service log recording succeeds', () => {
+    assertEquals(serviceLogRes.status, 200, 'Should return 200');
+    assert(serviceLogRes.body.id, 'Should have service log id');
+    assertEquals(serviceLogRes.body.work_description, '냉각수 교체, 필터 청소', 'Description should match');
+    assertEquals(serviceLogRes.body.labor_time, 1.5, 'Labor time should match');
+    assertEquals(serviceLogRes.body.parts_count, 2, 'Should have 2 parts');
+  });
+
+  // 22. Service log retrieval
+  console.log('\n[22] Service log retrieval');
+  const getServiceLogRes = await makeRequest('GET', `/as/${testAsId}/service-log`, null, testToken);
+  test('Service log retrieval succeeds', () => {
+    assertEquals(getServiceLogRes.status, 200, 'Should return 200');
+    assert(getServiceLogRes.body.id, 'Should have service log id');
+    assert(Array.isArray(getServiceLogRes.body.parts_used), 'Should have parts array');
+    assertEquals(getServiceLogRes.body.parts_used.length, 2, 'Should have 2 parts');
+  });
+
+  // 23. Service logs history
+  console.log('\n[23] Service logs history');
+  const serviceLogsRes = await makeRequest('GET', `/as/${testAsId}/service-logs`, null, testToken);
+  test('Service logs history retrieval', () => {
+    assertEquals(serviceLogsRes.status, 200, 'Should return 200');
+    assertEquals(Array.isArray(serviceLogsRes.body), true, 'Should return array');
+    assert(serviceLogsRes.body.length > 0, 'Should have at least one log');
+  });
+
+  // 24. Service log validation (missing work_description)
+  console.log('\n[24] Service log validation');
+  const invalidLogRes = await makeRequest('PUT', `/as/${testAsId}/service-log`, {
+    labor_time: 1.5
+  }, testToken);
+  test('Service log requires work_description', () => {
+    assertEquals(invalidLogRes.status, 400, 'Should return 400');
+    assert(invalidLogRes.body.error, 'Should have error message');
+  });
+
+  // 25. Empty service log for new request
+  console.log('\n[25] Empty service log for new request');
+  const newReqRes = await makeRequest('POST', '/as/register', {
+    customer_name: '이영희',
+    customer_phone: '010-1111-2222',
+    equipment_name: '세탁기',
+    symptom: '회전 안 됨'
+  });
+  const newReqId = newReqRes.body.id;
+
+  const emptyLogRes = await makeRequest('GET', `/as/${newReqId}/service-log`, null, testToken);
+  test('New request has null service log', () => {
+    assertEquals(emptyLogRes.status, 200, 'Should return 200');
+    assertEquals(emptyLogRes.body, null, 'Should return null for new request');
+  });
+
   // 결과 요약
   console.log('\n' + '='.repeat(50));
   console.log('Test Summary');
