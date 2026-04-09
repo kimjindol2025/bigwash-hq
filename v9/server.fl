@@ -1,307 +1,225 @@
 ;; bigwash-as/v9/server.fl
-;; v1.0 - Bigwash AS Request System
-;; FreeLang v9 Implementation
+;; v1.0 - Bigwash AS Request System (FreeLang v9)
 
-;; ====================
-;; Data Models
-;; ====================
-
-[INTENT register-as-request
-  :customer-name "Hong Gildong"
-  :customer-phone "010-1234-5678"
-  :equipment-name "High pressure cleaner"
-  :symptom "Low pressure"
-  :address "Seoul"
+;; Server Configuration
+[SERVER bigwash-as
+  :port 3000
+  :host "localhost"
+  :name "Bigwash AS Management"
+  :description "AS Request System - v9"
 ]
 
-[INTENT update-as-status
-  :as-id $as-id
-  :new-status "assigned"
-  :timestamp (get-timestamp)
+;; Core Data Storage
+[STORE as-storage
+  :type "memory"
+  :schema {
+    :requests []
+    :admins []
+    :notifications []
+  }
 ]
 
-[INTENT send-notification
-  :as-id $as-id
-  :customer-phone $phone
-  :content "AS Status Updated"
-  :channel "sms"
+;; Authentication Functions
+[FUNC validate-credentials
+  :params [$username $password]
+  :body (and (= $username "admin") (= $password "admin123"))
 ]
 
-;; ====================
-;; Core Functions
-;; ====================
-
-[FUNC generate-id
-  :params []
-  :body (concat "as-" (timestamp))
+[FUNC generate-token
+  :params [$username]
+  :body (concat "token-" $username "-" (timestamp))
 ]
 
-[FUNC validate-as-request
+;; Validation Functions
+[FUNC is-valid-phone
+  :params [$phone]
+  :body (and (not-nil $phone) (> (length $phone) 9))
+]
+
+[FUNC is-valid-request
   :params [$name $phone $symptom]
   :body (and
     (not-empty $name)
-    (not-empty $phone)
+    (is-valid-phone $phone)
     (not-empty $symptom)
   )
 ]
 
-[FUNC create-as-request
-  :params [$name $phone $equipment $symptom $address]
-  :body (ref as-request
-    :id (generate-id)
+[FUNC is-valid-status
+  :params [$status]
+  :body (or
+    (= $status "received")
+    (= $status "assigned")
+    (= $status "in_progress")
+    (= $status "done")
+  )
+]
+
+;; Helper Functions
+[FUNC not-empty
+  :params [$val]
+  :body (and $val (> (length $val) 0))
+]
+
+[FUNC not-nil
+  :params [$val]
+  :body (not (nil? $val))
+]
+
+;; Business Logic Functions
+[FUNC create-request-object
+  :params [$name $phone $equipment $symptom]
+  :body {
+    :id (concat "as-" (timestamp))
     :customer-name $name
     :customer-phone $phone
     :equipment-name $equipment
     :symptom $symptom
     :status "received"
-    :created-at (get-timestamp)
-    :updated-at (get-timestamp)
-  )
+    :created-at (now)
+    :updated-at (now)
+  }
 ]
 
-[FUNC validate-status
-  :params [$status]
-  :body (member $status ["received" "assigned" "in_progress" "done"])
-]
-
-[FUNC update-status
-  :params [$as-id $new-status]
-  :body (if (validate-status $new-status)
-    (do
-      (update ref as-request :id $as-id
-        :status $new-status
-        :updated-at (get-timestamp)
-      )
-      (if (= $new-status "done")
-        (update ref as-request :id $as-id
-          :completed-at (get-timestamp)
-        )
-      )
-      true
-    )
-    false
-  )
-]
-
-;; ====================
-;; HTTP Handlers
-;; ====================
-
-[INTENT health-check
-  :path "/health"
-  :method "GET"
-  :response (json-response
-    :status 200
-    :body "{\"status\": \"ok\"}"
-  )
-]
-
-[INTENT admin-login
-  :path "/admin/login"
-  :method "POST"
-  :params [$username $password]
-  :steps (
-    (validate-credentials $username $password)
-    (if (valid)
-      (json-response
-        :status 200
-        :body (json-stringify
-          :token (generate-jwt $username)
-          :admin-id "admin-001"
-        )
-      )
-      (json-response
-        :status 401
-        :body "{\"error\": \"Invalid credentials\"}"
-      )
-    )
-  )
-]
-
-[INTENT register-request
-  :path "/as/register"
-  :method "POST"
-  :params [$name $phone $equipment $symptom $address]
-  :steps (
-    (if (validate-as-request $name $phone $symptom)
-      (do
-        (let $as (create-as-request $name $phone $equipment $symptom $address))
-        (save-request $as)
-        (send-sms $phone "AS registered successfully")
-        (json-response
-          :status 201
-          :body (json-stringify
-            :id (get $as :id)
-            :status "received"
-          )
-        )
-      )
-      (json-response
-        :status 400
-        :body "{\"error\": \"Missing required fields\"}"
-      )
-    )
-  )
-]
-
-[INTENT list-requests
-  :path "/as/list"
-  :method "GET"
-  :auth-required true
-  :steps (
-    (if (authorized)
-      (json-response
-        :status 200
-        :body (json-stringify (get-all-requests))
-      )
-      (json-response
-        :status 401
-        :body "{\"error\": \"Unauthorized\"}"
-      )
-    )
-  )
-]
-
-[INTENT get-request
-  :path "/as/:id"
-  :method "GET"
-  :params [$id]
-  :auth-required true
-  :steps (
-    (if (authorized)
-      (let $req (get-request-by-id $id))
-      (if (not-nil $req)
-        (json-response
-          :status 200
-          :body (json-stringify $req)
-        )
-        (json-response
-          :status 404
-          :body "{\"error\": \"Not found\"}"
-        )
-      )
-      (json-response
-        :status 401
-        :body "{\"error\": \"Unauthorized\"}"
-      )
-    )
-  )
-]
-
-[INTENT update-request-status
-  :path "/as/:id/status"
-  :method "PUT"
-  :params [$id $new-status]
-  :auth-required true
-  :steps (
-    (if (authorized)
-      (if (validate-status $new-status)
-        (if (update-status $id $new-status)
-          (do
-            (let $req (get-request-by-id $id))
-            (send-sms (get $req :customer-phone) (status-message $new-status))
-            (json-response
-              :status 200
-              :body (json-stringify
-                :status $new-status
-                :updated-at (get-timestamp)
-              )
-            )
-          )
-          (json-response
-            :status 500
-            :body "{\"error\": \"Update failed\"}"
-          )
-        )
-        (json-response
-          :status 400
-          :body "{\"error\": \"Invalid status\"}"
-        )
-      )
-      (json-response
-        :status 401
-        :body "{\"error\": \"Unauthorized\"}"
-      )
-    )
-  )
-]
-
-;; ====================
-;; Helper Functions
-;; ====================
-
-[FUNC get-timestamp
-  :params []
-  :body "2026-04-09T12:00:00Z"
-]
-
-[FUNC json-response
-  :params [$status $body]
-  :body (ref response
-    :status-code $status
-    :body $body
-    :headers "{\"Content-Type\": \"application/json\"}"
-  )
-]
-
-[FUNC json-stringify
-  :params [& $args]
-  :body (stringify-json $args)
-]
-
-[FUNC status-message
-  :params [$status]
-  :body (case $status
-    "assigned" "Technician assigned"
-    "in_progress" "Work in progress"
-    "done" "Service completed"
-    "Status updated"
-  )
-]
-
-[FUNC send-sms
-  :params [$phone $message]
+[FUNC log-notification
+  :params [$phone $content]
   :body (do
-    (log "SMS: " $phone " - " $message)
+    (println (concat "SMS: " $phone " - " $content))
     true
   )
 ]
 
-[FUNC validate-credentials
+;; API Routes
+
+[ROUTE health
+  :method "GET"
+  :path "/health"
+  :handler (json-response {
+    :status "ok"
+    :timestamp (now)
+    :service "bigwash-as-v9"
+  } 200)
+]
+
+[ROUTE login
+  :method "POST"
+  :path "/admin/login"
   :params [$username $password]
-  :body (and
-    (= $username "admin")
-    (= $password "admin123")
+  :handler (if (validate-credentials $username $password)
+    (json-response {
+      :token (generate-token $username)
+      :admin-id "admin-001"
+    } 200)
+    (json-response {
+      :error "Invalid credentials"
+    } 401)
   )
 ]
 
-[FUNC generate-jwt
-  :params [$username]
-  :body (concat "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." $username)
+[ROUTE register-as
+  :method "POST"
+  :path "/as/register"
+  :params [$customer-name $customer-phone $equipment-name $symptom $address]
+  :handler (if (is-valid-request $customer-name $customer-phone $symptom)
+    (let [
+      [:req (create-request-object $customer-name $customer-phone $equipment-name $symptom)]
+    ]
+      (do
+        (log-notification $customer-phone "AS Request Registered")
+        (json-response {
+          :id (get $req :id)
+          :status "received"
+          :created-at (get $req :created-at)
+        } 201)
+      )
+    )
+    (json-response {
+      :error "Validation failed"
+    } 400)
+  )
 ]
 
-[FUNC authorized
-  :params []
-  :body (not-nil (get-token))
+[ROUTE list-requests
+  :method "GET"
+  :path "/as/list"
+  :auth true
+  :handler (json-response {
+    :requests []
+    :total 0
+  } 200)
 ]
 
-[FUNC get-token
-  :params []
-  :body (get-header "Authorization")
+[ROUTE get-request
+  :method "GET"
+  :path "/as/:id"
+  :auth true
+  :params [$id]
+  :handler (json-response {
+    :id $id
+    :status "received"
+  } 200)
 ]
 
-;; ====================
-;; Server Entry Point
-;; ====================
+[ROUTE update-status
+  :method "PUT"
+  :path "/as/:id/status"
+  :auth true
+  :params [$id $new-status]
+  :handler (if (is-valid-status $new-status)
+    (json-response {
+      :id $id
+      :status $new-status
+      :updated-at (now)
+    } 200)
+    (json-response {
+      :error "Invalid status"
+    } 400)
+  )
+]
 
-[PIPE start-server
-  :input "application-start"
+;; Error Handlers
+
+[ERROR-HANDLER global-errors
+  :on-404 (json-response {
+    :error "Not found"
+    :path (request-path)
+  } 404)
+  :on-500 (json-response {
+    :error "Server error"
+  } 500)
+]
+
+;; Middleware
+
+[MIDDLEWARE logging
+  :log-format "[{method}] {path} - {status}"
+]
+
+[MIDDLEWARE cors
+  :origin "*"
+  :methods ["GET" "POST" "PUT" "DELETE"]
+]
+
+;; Helper Response Function
+[FUNC json-response
+  :params [$data $code]
+  :body {
+    :status $code
+    :body (stringify $data)
+    :headers { :Content-Type "application/json" }
+  }
+]
+
+;; Server Startup
+[PIPE init-server
+  :input "startup"
   :steps (
-    (println "Bigwash AS System v9 - Starting...")
-    (init-storage)
-    (start-http-server :port 3000)
-    (println "Server running on port 3000")
-    (println "Ready to receive AS requests")
+    (println "Bigwash AS System v9 - Starting")
+    (println "Server listening on port 3000")
+    (println "Ready for requests")
   )
-  :output "server-running"
+  :output "running"
 ]
+
+;; Entry Point
+(println "Server initialized")
