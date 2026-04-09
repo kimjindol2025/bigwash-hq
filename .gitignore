@@ -13,7 +13,9 @@ dist/
 build/
 *.js
 !tests/run.js
+!tests/integration.js
 !scripts/migrate.js
+!server.js
 
 # Logs
 logs/

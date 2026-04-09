@@ -5,17 +5,18 @@
   "main": "core/server.fl",
   "scripts": {
     "build": "fl-compiler build core/server.fl -o dist/server.js",
-    "dev": "fl-repl core/server.fl",
-    "start": "node dist/server.js",
+    "dev": "node server.js",
+    "start": "node server.js",
     "migrate": "node scripts/migrate.js",
     "test": "node tests/run.js",
+    "test:integration": "node tests/integration.js",
+    "test:all": "npm run test && npm run test:integration",
     "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
-    "freelang-v9": "^1.0.0",
-    "pg": "^8.10.0",
+    "express": "^4.18.0",
     "jsonwebtoken": "^9.0.0",
-    "express": "^4.18.0"
+    "pg": "^8.10.0"
   },
   "devDependencies": {
     "jest": "^29.0.0"
