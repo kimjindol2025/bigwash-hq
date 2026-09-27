@@ -68,6 +68,16 @@
     @media(max-width:980px){.split{grid-template-columns:1fr}.sidebar{width:180px}}
     .desk-sticky{position:sticky;top:0;z-index:5}
     .desk-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line)}
+    .desk-hit{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;margin-bottom:8px;background:#0e1626}
+    .desk-hit:hover{border-color:rgba(61,224,199,.45)}
+    .desk-hit.active{border-color:var(--accent);background:rgba(61,224,199,.08)}
+    .desk-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+    .desk-section h4{font-size:13px;margin-bottom:8px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+    .desk-kv{display:grid;grid-template-columns:72px 1fr;gap:4px 10px;font-size:13px;margin:8px 0}
+    .desk-kv .k{color:var(--muted)}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);margin-right:6px}
+    .pill.ok{border-color:rgba(61,220,151,.4);color:var(--ok)}
+    .pill.warn{border-color:rgba(255,176,32,.4);color:var(--warn)}
     @media(max-width:720px){
       body{flex-direction:column}
       .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;gap:4px;padding:8px}
@@ -340,39 +350,48 @@
   }
 
   // ----- Desk -----
+
   function renderDesk() {
     const el = document.getElementById('p-desk');
     el.innerHTML = `
       <div class="card desk-sticky">
-        <h3>전화 데스크</h3>
-        <div class="row">
-          <div class="grow"><label>검색 (번호·상호)</label>
-            <input id="deskQ" placeholder="010… 또는 세차장명" /></div>
+        <div class="row" style="align-items:flex-end">
+          <div class="grow">
+            <label>고객 검색 (번호 · 상호)</label>
+            <input id="deskQ" placeholder="예: 5555 또는 강남세차" />
+          </div>
           <button class="btn btn-primary" type="button" id="btnDeskSearch">검색</button>
         </div>
       </div>
+
       <div id="deskHits"></div>
-      <div class="card" id="deskMinForm">
-        <h3>고객 없음 → 최소 저장</h3>
+
+      <div class="card" id="deskMinForm" style="display:none">
+        <h3 style="margin-bottom:4px">신규 고객</h3>
+        <p class="muted" style="margin-bottom:12px;font-size:12px">검색 결과가 없을 때만 표시됩니다.</p>
         <div class="row">
-          <div><label>유형 *</label>
+          <div>
+            <label>유형 *</label>
             <select id="cType">
               <option value="franchise">가맹</option>
               <option value="direct">직영</option>
               <option value="shop" selected>일반매장</option>
               <option value="other">개인/기타</option>
-            </select></div>
+            </select>
+          </div>
           <div class="grow"><label>표시명 *</label><input id="cName" /></div>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <div class="grow"><label>대표전화 *</label><input id="cPhone" /></div>
-          <div class="grow"><label>주소 *</label><input id="cAddr" /></div>
-          <div><label>상태 *</label>
+          <div>
+            <label>상태 *</label>
             <select id="cStatus">
               <option value="active">거래중</option>
               <option value="dormant">휴면</option>
               <option value="closed">종료</option>
-            </select></div>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>대표전화 *</label><input id="cPhone" /></div>
+          <div class="grow"><label>주소 *</label><input id="cAddr" /></div>
         </div>
         <div class="actions">
           <button class="btn btn-primary" type="button" id="btnCustSave">저장</button>
@@ -380,46 +399,15 @@
           <button class="btn" type="button" id="btnCustSaveConsult">저장 후 상담종결</button>
         </div>
       </div>
-      <div class="card" id="deskDetail" style="display:none">
-        <div id="deskCardHead"></div>
-        <div id="deskEq" style="margin-top:10px"></div>
-        <div id="deskRecent" style="margin-top:10px"></div>
-        <div id="deskWarranty" style="margin-top:10px"></div>
-        <div class="card" style="margin-top:10px;background:#0e1626">
-          <h3>장비 추가 (출장 전 필수)</h3>
-          <div class="row">
-            <div class="grow"><label>장비명 *</label><input id="eqName" /></div>
-            <div class="grow"><label>설치위치 *</label><input id="eqLoc" placeholder="베이1" /></div>
-          </div>
-          <div class="actions"><button class="btn btn-primary" type="button" id="btnEqSave">장비 추가</button></div>
-        </div>
-        <div class="card" style="margin-top:10px;background:#0e1626">
-          <h3>출장 / 상담</h3>
-          <label>장비 *</label><select id="tEq"></select>
-          <div style="margin-top:8px"><label>증상 *</label><textarea id="tSymptom"></textarea></div>
-          <div class="row" style="margin-top:8px">
-            <div class="grow"><label>권역</label><select id="tRegion"></select></div>
-            <div class="grow"><label>주담당</label><select id="tAssignee"></select></div>
-          </div>
-          <div style="margin-top:8px"><label>상담 메모 *</label><textarea id="tCallMemo"></textarea></div>
-          <div class="actions desk-actions">
-            <button class="btn btn-primary" type="button" id="btnDispatch">출장 만들기</button>
-            <button class="btn" type="button" id="btnConsultEnd">상담종결</button>
-          </div>
-        </div>
-      </div>`;
-    Promise.all([loadStaff(), loadRegions()]).then(() => {
-      document.getElementById('tRegion').innerHTML = regionOptions();
-      document.getElementById('tAssignee').innerHTML = staffOptions();
-    });
+
+      <div class="card" id="deskDetail" style="display:none"></div>
+    `;
+    Promise.all([loadStaff(), loadRegions()]).then(() => {});
     document.getElementById('btnDeskSearch').onclick = deskSearch;
     document.getElementById('deskQ').onkeydown = (e) => { if (e.key === 'Enter') deskSearch(); };
     document.getElementById('btnCustSave').onclick = () => saveCustomer('save');
     document.getElementById('btnCustSaveDispatch').onclick = () => saveCustomer('dispatch');
     document.getElementById('btnCustSaveConsult').onclick = () => saveCustomer('consult');
-    document.getElementById('btnEqSave').onclick = saveEquipment;
-    document.getElementById('btnDispatch').onclick = () => createDispatch('dispatch');
-    document.getElementById('btnConsultEnd').onclick = () => createDispatch('consult');
   }
 
   async function deskSearch() {
@@ -428,87 +416,128 @@
     document.getElementById('cPhone').value = q;
     const rows = await api('/hq/customers?q=' + encodeURIComponent(q));
     const box = document.getElementById('deskHits');
+    const detail = document.getElementById('deskDetail');
+    const minForm = document.getElementById('deskMinForm');
     if (!rows.length) {
-      box.innerHTML = '<div class="empty">검색 결과 없음 → 아래 최소 폼으로 저장</div>';
-      document.getElementById('deskDetail').style.display = 'none';
-      document.getElementById('deskMinForm').style.display = 'block';
+      box.innerHTML = '<div class="empty">검색 결과 없음</div>';
+      detail.style.display = 'none';
+      minForm.style.display = 'block';
       selectedCustomer = null;
       return;
     }
-    document.getElementById('deskMinForm').style.display = 'none';
-    box.innerHTML = rows.map((c) =>
-      '<div class="card" style="cursor:pointer;padding:10px" data-id="' + esc(c.customer_id) + '">' +
-      '<b>' + esc(c.display_name) + '</b> <span class="mono">' + esc(c.primary_phone) + '</span>' +
-      '<div class="muted">' + esc(c.address || '') + '</div></div>'
-    ).join('');
-    box.querySelectorAll('[data-id]').forEach((el) => {
-      el.onclick = () => selectCustomer(rows.find((r) => r.customer_id === el.dataset.id));
+    minForm.style.display = 'none';
+    box.innerHTML = '<div class="muted" style="margin-bottom:8px">검색 결과 ' + rows.length + '건</div>' +
+      rows.map((c) =>
+        '<div class="desk-hit" data-id="' + esc(c.customer_id) + '">' +
+        '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">' +
+        '<div><b>' + esc(c.display_name) + '</b></div>' +
+        '<span class="pill">' + esc(c.status || '') + '</span></div>' +
+        '<div class="mono" style="margin-top:4px">' + esc(c.primary_phone) + '</div>' +
+        '<div class="muted" style="margin-top:2px">' + esc(c.address || '') + '</div></div>'
+      ).join('');
+    box.querySelectorAll('.desk-hit').forEach((el) => {
+      el.onclick = () => {
+        box.querySelectorAll('.desk-hit').forEach((x) => x.classList.remove('active'));
+        el.classList.add('active');
+        selectCustomer(rows.find((r) => r.customer_id === el.dataset.id));
+      };
     });
-    if (rows.length === 1) await selectCustomer(rows[0]);
+    if (rows.length === 1) {
+      box.querySelector('.desk-hit').classList.add('active');
+      await selectCustomer(rows[0]);
+    } else {
+      detail.style.display = 'none';
+      selectedCustomer = null;
+    }
   }
 
   async function selectCustomer(c) {
     selectedCustomer = c;
-    document.getElementById('deskDetail').style.display = 'block';
-    document.getElementById('deskMinForm').style.display = 'none';
-    const hub = await api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/hub');
-    const extra = await api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/extra').catch(() => ({}));
-    // extra endpoint may not exist as GET — use hub or separate
-    let regionId = '';
-    try {
-      const exRows = await api('/hq/purchases?customer_id=' + encodeURIComponent(c.customer_id));
-      window.__purchases = exRows;
-    } catch (_) { window.__purchases = []; }
-    // load extra via warranty + finance path: GET customer then we stored region in extra table — add to hub if missing
-    const hint = await api('/hq/warranty-hint?customer_id=' + encodeURIComponent(c.customer_id));
-    const tickets = hub.tickets || [];
-    const recent = tickets.slice(0, 5);
-    // fetch extra by reading customer hub — extend: call purchases already; for region use ticket finance from last or customer extra endpoint
-    let regionLabel = '-';
-    try {
-      // reuse POST extra get by reading from a lightweight approach: list regions and match from last ticket
-      await loadRegions();
-    } catch (_) {}
-    document.getElementById('deskCardHead').innerHTML =
-      '<h3>' + esc(c.display_name) + ' <span class="badge">' + esc(c.status) + '</span></h3>' +
-      '<div class="mono">' + esc(c.primary_phone) + '</div>' +
-      '<div class="muted">' + esc(c.address || '') + '</div>' +
-      '<div class="actions" style="margin-top:8px">' +
-      '<button class="btn btn-sm" type="button" id="btnOpenCust">고객 카드</button></div>';
-    document.getElementById('btnOpenCust').onclick = () => { showPanel('customers'); openCustomerEditor(c.customer_id); };
-    document.getElementById('deskWarranty').innerHTML =
-      '<div class="badge">' + (hint.warranty === 'free' ? '무상 가능' : '유상') + '</div> ' +
-      '<span class="muted">' + esc(hint.reason || '') + '</span>';
-    document.getElementById('deskRecent').innerHTML = recent.length
-      ? '<h4>최근 출장</h4><ul>' + recent.map((t) => '<li class="mono">' + esc(t.number) + ' ' + esc(t.status) + ' ' + esc(t.symptom) + '</li>').join('') + '</ul>'
-      : '<div class="muted">최근 출장 없음</div>';
-    await refreshEquipment();
-    // set region select from customer extra
-    try {
-      const allExtra = await fetchExtra(c.customer_id);
-      regionId = allExtra.region_id || '';
-      document.getElementById('tRegion').innerHTML = regionOptions(regionId);
-    } catch (_) {
-      document.getElementById('tRegion').innerHTML = regionOptions();
-    }
-    document.getElementById('tAssignee').innerHTML = staffOptions();
-  }
+    const detail = document.getElementById('deskDetail');
+    detail.style.display = 'block';
+    const [hub, extra, hint] = await Promise.all([
+      api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/hub'),
+      api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/extra').catch(() => ({})),
+      api('/hq/warranty-hint?customer_id=' + encodeURIComponent(c.customer_id)).catch(() => ({ warranty: 'paid', reason: '' }))
+    ]);
+    const eqs = hub.equipment || [];
+    const recent = (hub.tickets || []).slice(0, 5);
+    const regionName = (regions.find((r) => r.region_id === (extra.region_id || '')) || {}).name || (extra.region_id || '-');
+    const free = hint.warranty === 'free';
 
-  async function fetchExtra(cid) {
-    return api('/hq/customers/' + encodeURIComponent(cid) + '/extra');
+    detail.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <h3 style="margin:0 0 6px">${esc(c.display_name)}</h3>
+          <div class="desk-kv">
+            <div class="k">전화</div><div class="mono">${esc(c.primary_phone)}</div>
+            <div class="k">주소</div><div>${esc(c.address || '-')}</div>
+            <div class="k">권역</div><div>${esc(regionName)}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <span class="pill ${free ? 'ok' : 'warn'}">${free ? '무상 가능' : '유상'}</span>
+          <div class="muted" style="font-size:11px;margin-top:6px">${esc(hint.reason || '')}</div>
+          <div class="actions" style="margin-top:8px;justify-content:flex-end">
+            <button class="btn btn-sm" type="button" id="btnOpenCust">고객 카드</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="desk-section">
+        <h4>장비 ${eqs.length}</h4>
+        <div id="deskEqTable">${eqs.length
+          ? '<table><thead><tr><th>이름</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
+            eqs.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note || '') + '</td><td class="mono">' + esc(e.serial || '') + '</td></tr>').join('') +
+            '</tbody></table>'
+          : '<div class="muted">등록된 장비 없음</div>'}</div>
+        <div class="row" style="margin-top:10px">
+          <div class="grow"><label>장비명 *</label><input id="eqName" placeholder="고압펌프" /></div>
+          <div class="grow"><label>설치위치 *</label><input id="eqLoc" placeholder="베이1" /></div>
+          <button class="btn btn-primary" type="button" id="btnEqSave">추가</button>
+        </div>
+      </div>
+
+      <div class="desk-section">
+        <h4>최근 출장</h4>
+        ${recent.length
+          ? '<table><thead><tr><th>번호</th><th>상태</th><th>요청</th></tr></thead><tbody>' +
+            recent.map((t) => '<tr class="clickable" data-tid="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) + '</td><td>' + esc(t.symptom || '') + '</td></tr>').join('') +
+            '</tbody></table>'
+          : '<div class="muted">최근 출장 없음</div>'}
+      </div>
+
+      <div class="desk-section">
+        <h4>출장 만들기</h4>
+        <label>장비 *</label>
+        <select id="tEq">${eqs.length
+          ? eqs.map((e) => '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) + (e.location_note ? ' · ' + esc(e.location_note) : '') + '</option>').join('')
+          : '<option value="">먼저 장비를 추가하세요</option>'}</select>
+        <div style="margin-top:8px"><label>수리 요청 / 증상 *</label><textarea id="tSymptom" placeholder="증상, 요청 내용"></textarea></div>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>권역</label><select id="tRegion">${regionOptions(extra.region_id || '')}</select></div>
+          <div class="grow"><label>주담당</label><select id="tAssignee">${staffOptions()}</select></div>
+        </div>
+        <div style="margin-top:8px"><label>상담 메모 *</label><textarea id="tCallMemo" placeholder="통화 내용"></textarea></div>
+        <div class="actions desk-actions">
+          <button class="btn btn-primary" type="button" id="btnDispatch">출장 만들기</button>
+          <button class="btn" type="button" id="btnConsultEnd">상담종결</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btnOpenCust').onclick = () => { showPanel('customers'); openCustomerEditor(c.customer_id); };
+    document.getElementById('btnEqSave').onclick = saveEquipment;
+    document.getElementById('btnDispatch').onclick = () => createDispatch('dispatch');
+    document.getElementById('btnConsultEnd').onclick = () => createDispatch('consult');
+    detail.querySelectorAll('[data-tid]').forEach((tr) => {
+      tr.onclick = () => openTicket(tr.dataset.tid);
+    });
   }
 
   async function refreshEquipment() {
     if (!selectedCustomer) return;
-    const eqs = await api('/hq/equipment?customer_id=' + encodeURIComponent(selectedCustomer.customer_id));
-    document.getElementById('deskEq').innerHTML = eqs.length
-      ? '<h4>장비</h4><table><thead><tr><th>이름</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
-        eqs.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note) + '</td><td class="mono">' + esc(e.serial) + '</td></tr>').join('') +
-        '</tbody></table>'
-      : '<div class="empty">장비 없음 — 아래에서 추가 후 출장</div>';
-    document.getElementById('tEq').innerHTML = eqs.length
-      ? eqs.map((e) => '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) + ' / ' + esc(e.location_note || '') + '</option>').join('')
-      : '<option value="">장비 없음</option>';
+    await selectCustomer(selectedCustomer);
   }
 
   async function saveCustomer(mode) {
@@ -525,9 +554,6 @@
       toast('고객 저장');
       document.getElementById('deskQ').value = body.primary_phone;
       await deskSearch();
-      if (mode === 'dispatch') {
-        document.getElementById('tCallMemo').value = document.getElementById('tCallMemo').value || '신규 저장 후 출장';
-      }
       if (mode === 'consult') {
         await api('/hq/calls', { method: 'POST', body: JSON.stringify({
           phone: body.primary_phone, call_type: 'other', memo: '저장 후 상담종결', customer_id: c.customer_id
@@ -536,7 +562,7 @@
       }
     } catch (e) {
       if (String(e.message).indexOf('already exists') >= 0 || String(e.message).indexOf('409') >= 0) {
-        toast('번호 중복 — 기존 카드 검색', true);
+        toast('번호 중복 — 기존 카드로 이동', true);
         document.getElementById('deskQ').value = body.primary_phone;
         await deskSearch();
       } else toast(e.message, true);
@@ -554,9 +580,7 @@
         body: JSON.stringify({ customer_id: selectedCustomer.customer_id, name, location_note })
       });
       toast('장비 추가');
-      document.getElementById('eqName').value = '';
-      document.getElementById('eqLoc').value = '';
-      await refreshEquipment();
+      await selectCustomer(selectedCustomer);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -580,18 +604,16 @@
       }
       const equipment_id = document.getElementById('tEq').value;
       const symptom = document.getElementById('tSymptom').value.trim();
-      if (!equipment_id) return toast('장비 필수 — 먼저 추가', true);
+      if (!equipment_id) return toast('장비 필수 — 위에서 추가', true);
       if (!symptom) return toast('증상 필수', true);
-      const region_id = document.getElementById('tRegion').value;
-      const assignee_id = document.getElementById('tAssignee').value;
       const t = await api('/hq/tickets', {
         method: 'POST',
         body: JSON.stringify({
           customer_id: selectedCustomer.customer_id,
           equipment_id, symptom,
           urgency: 'normal',
-          assignee_id,
-          region_id,
+          assignee_id: document.getElementById('tAssignee').value,
+          region_id: document.getElementById('tRegion').value,
           ticket_type: 'dispatch',
           intake_phone: selectedCustomer.primary_phone,
           intake_memo: callMemo,
@@ -602,7 +624,6 @@
       openTicket(t.ticket_id);
     } catch (e) { toast(e.message, true); }
   }
-
 
   async function renderBoard(status) {
     const el = document.getElementById('p-board');
