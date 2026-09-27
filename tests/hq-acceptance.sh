@@ -106,7 +106,7 @@ curl -sS -X POST "$BASE/hq/tickets/$TID2/transition" -H "$AUTH" -H 'content-type
 DET2=$(curl -sS "$BASE/hq/tickets/$TID2" -H "$AUTH")
 echo "$DET2" | json 'assert d["ticket"]["status"]=="done" and d["ticket"].get("photo_incomplete")=="true"'
 FU=$(curl -sS "$BASE/hq/followups" -H "$AUTH")
-echo "$FU" | python3 -c "import json,sys; assert any(t['ticket_id']=='$TID2' for t in json.load(sys.stdin))"
+echo "$FU" | python3 -c "import json,sys; d=json.load(sys.stdin); rows=d['photo'] if isinstance(d, dict) else d; assert any(t['ticket_id']=='$TID2' for t in rows)"
 pass "6 done without photo → incomplete list"
 
 # --- 7. 사후확인 → 종결 ---

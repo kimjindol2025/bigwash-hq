@@ -916,6 +916,28 @@
             (db-patch "hq_users" $id {"note" $next "updated_at" (iso-now)})
             (json-ok {"user_id" $id "kind" $kind "day" $day "note" $memo})))))))
 
+(defn day-close-label [$kind]
+  (if (= $kind "clock_out")
+    "퇴근"
+    (if (= $kind "return_hq") "본사 회기" "없음")))
+
+(defn handle-day-close-lookup [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$uid (?? (server-req-query $req "user_id") (uid $gate))
+            $day (?? (server-req-query $req "day") "")
+            $u (db-row (db-get-row "hq_users" $uid))
+            $p (if (nil? $u) {"kind" "" "day" "" "note" ""} (day-close-parse (?? (get $u "note") "")))
+            $kind (if (and (not (= $day "")) (not (= (get $p "day") $day)))
+                    ""
+                    (?? (get $p "kind") ""))]
+        (json-ok {"user_id" $uid
+                  "kind" $kind
+                  "day" (if (= $kind "") $day (get $p "day"))
+                  "note" (if (= $kind "") "" (?? (get $p "note") ""))
+                  "label" (day-close-label $kind)})))))
+
 (defn handle-day-close-get [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))

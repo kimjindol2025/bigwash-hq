@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 본사 HQ. 기본 30000. HQ_PORT가 있으면 그 포트만. 없으면 30000–30099 빈 포트.
+# 본사 HQ. 기본 30000. HQ_PORT가 있으면 그 포트만. 없으면 30000–39999 빈 포트.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -53,7 +53,7 @@ if [[ -n "${HQ_PORT:-}" ]]; then
 else
   chosen=""
   busy=""
-  for p in $(seq 30000 30099); do
+  for p in $(seq 30000 39999); do
     if port_free "$p"; then
       chosen="$p"
       break
@@ -61,7 +61,7 @@ else
     busy="${busy} ${p}"
   done
   if [[ -z "$chosen" ]]; then
-    echo "[bigwash-hq] no free port in 30000-30099. in use:${busy}" >&2
+    echo "[bigwash-hq] no free port in 30000-39999. in use:${busy}" >&2
     exit 1
   fi
 fi

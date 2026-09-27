@@ -9,7 +9,7 @@
 ```bash
 npm run provision          # HQ 스키마 (+ ext)
 bash scripts/provision-hq-ext.sh   # 확장 테이블 (있으면)
-npm start                  # AFJ HQ. 기본 :30000 (30000–30099)
+npm start                  # AFJ HQ. 기본 :30000 (30000–39999)
 ```
 
 브라우저: **`/hq/login.html`**  

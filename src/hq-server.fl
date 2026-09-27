@@ -476,20 +476,73 @@
             (not (or (= (?? (get $t "assignee_id") "") $uid)
                      (> (length (filter (fn [$a] (= (?? (get $a "user_id") "") $uid)) $asg)) 0)))))))))
 
-(defn mine-ticket-row [$t]
-  (let [$c (db-row (db-get-row "hq_customers" (?? (get $t "customer_id") "")))
-        $e (db-row (db-get-row "hq_equipment" (?? (get $t "equipment_id") "")))
-        $f (finance-get (get $t "ticket_id"))]
-    {"ticket_id" (get $t "ticket_id")
-     "number" (?? (get $t "number") "")
-     "status" (?? (get $t "status") "")
-     "scheduled_at" (?? (get $t "scheduled_at") "")
-     "symptom" (?? (get $t "symptom") "")
-     "customer_name" (if (nil? $c) "" (?? (get $c "display_name") ""))
-     "address" (if (nil? $c) "" (?? (get $c "address") ""))
-     "phone" (if (nil? $c) "" (?? (get $c "primary_phone") ""))
-     "equipment_name" (if (nil? $e) "" (?? (get $e "name") ""))
-     "settlement_status" (if (nil? $f) "" (?? (get $f "settlement_status") ""))}))
+(defn company-rows [$table $company]
+  (db-rows (db-request "POST" "/v2/query" AFLDB_READ_KEY
+                       {"table" $table
+                        "where" {"company_id" $company}
+                        "limit" 500})))
+
+(defn user-name-of [$users $uid]
+  (let [$hit (filter (fn [$u] (= (get $u "user_id") $uid)) $users)]
+    (if (or (= (?? $uid "") "") (= (length $hit) 0))
+      ""
+      (?? (get (get $hit 0) "name") ""))))
+
+(defn assignee-bits [$t $users $asg]
+  (let [$tid (get $t "ticket_id")
+        $mine (filter (fn [$a] (= (get $a "ticket_id") $tid)) $asg)
+        $prim (filter (fn [$a] (and (= (?? (get $a "kind") "") "staff")
+                                    (= (?? (get $a "is_primary") "") "true")))
+                      $mine)
+        $uid (if (> (length $prim) 0)
+               (?? (get (get $prim 0) "user_id") "")
+               (?? (get $t "assignee_id") ""))
+        $ctors (filter (fn [$a] (= (?? (get $a "kind") "") "contractor")) $mine)
+        $uname (user-name-of $users $uid)
+        $name (if (not (= $uname ""))
+                $uname
+                (if (> (length $ctors) 0)
+                  (?? (get (get $ctors 0) "contractor_name") "")
+                  ""))
+        $comp (if (> (length $mine) 1) (- (length $mine) 1) 0)]
+    {"assignee_name" $name "companion_count" $comp}))
+
+(defn present-ticket [$t $ctx]
+  (let [$users (get $ctx "users")
+        $customers (get $ctx "customers")
+        $fins (get $ctx "fins")
+        $asg (get $ctx "asg")
+        $cid (?? (get $t "customer_id") "")
+        $cs (filter (fn [$c] (= (get $c "customer_id") $cid)) $customers)
+        $c (if (= (length $cs) 0) nil (get $cs 0))
+        $eid (?? (get $t "equipment_id") "")
+        $es (filter (fn [$e] (= (get $e "equipment_id") $eid)) (get $ctx "equip"))
+        $e (if (= (length $es) 0) nil (get $es 0))
+        $tid (get $t "ticket_id")
+        $fs (filter (fn [$f] (= (get $f "ticket_id") $tid)) $fins)
+        $settle (if (= (length $fs) 0) "" (?? (get (get $fs 0) "settlement_status") ""))
+        $bits (assignee-bits $t $users $asg)
+        $cname (if (nil? $c) "" (?? (get $c "display_name") ""))]
+    (assoc (assoc (assoc (assoc (assoc (assoc (assoc (assoc $t
+      "customer_display_name" $cname)
+      "customer_name" $cname)
+      "address" (if (nil? $c) "" (?? (get $c "address") "")))
+      "phone" (if (nil? $c) "" (?? (get $c "primary_phone") "")))
+      "equipment_name" (if (nil? $e) "" (?? (get $e "name") "")))
+      "visit_at" (?? (get $t "scheduled_at") ""))
+      "settlement_status" $settle)
+      "assignee_name" (get $bits "assignee_name")
+      "companion_count" (get $bits "companion_count"))))
+
+(defn list-ctx [$company]
+  {"users" (company-rows "hq_users" $company)
+   "customers" (company-rows "hq_customers" $company)
+   "equip" (company-rows "hq_equipment" $company)
+   "fins" (company-rows "hq_ticket_finance" $company)
+   "asg" (company-rows "hq_ticket_assignees" $company)})
+
+(defn mine-ticket-row [$t $ctx]
+  (present-ticket $t $ctx))
 
 (defn handle-tickets-list [$req]
   (let [$gate (require-user $req)]
@@ -521,14 +574,17 @@
                                    (if (> (length $hit) 0) $a (append $a [$t]))))
                                []
                                (append $own $extra))]
-            (json-ok (map mine-ticket-row $dedup)))
+            (let [$ctx (list-ctx $company)]
+              (json-ok (map (fn [$t] (present-ticket $t $ctx)) $dedup))))
           (let [$where (if (not (= $status ""))
                          {"company_id" $company "status" $status}
                          (if (not (= $assignee ""))
                            {"company_id" $company "assignee_id" $assignee}
                            {"company_id" $company}))
-                $rows (db-rows (db-query "hq_tickets" $where))]
-            (json-ok (reverse (sort-by (fn [$r] (get $r "created_at")) $rows)))))))))
+                $rows (db-rows (db-query "hq_tickets" $where))
+                $ctx (list-ctx $company)]
+            (json-ok (reverse (sort-by (fn [$r] (get $r "created_at"))
+                                       (map (fn [$t] (present-ticket $t $ctx)) $rows))))))))))
 
 (defn handle-ticket-get [$req]
   (let [$gate (require-user $req)]
@@ -882,10 +938,12 @@
                                   "where" {"company_id" $company}
                                   "limit" 500})
             $all-asg (db-rows $asg-res)
+            $ctx (list-ctx $company)
             $enriched (map (fn [$t]
                              (let [$tid (get $t "ticket_id")
-                                   $mine (filter (fn [$a] (= (get $a "ticket_id") $tid)) $all-asg)]
-                               (assoc $t "assignees" $mine)))
+                                   $mine (filter (fn [$a] (= (get $a "ticket_id") $tid)) $all-asg)
+                                   $row (present-ticket $t $ctx)]
+                               (assoc $row "assignees" $mine)))
                            $rows)]
         (json-ok {"date" $day "tickets" $enriched "conflicts" $conflicts})))))
 
@@ -907,13 +965,25 @@
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$tickets (db-rows (db-query "hq_tickets" {"company_id" (cid $gate)}))
-            $rows (filter (fn [$t]
-                            (or (= (get $t "status") "followup")
-                                (= (?? (get $t "photo_incomplete") "") "true")
-                                (= (?? (get $t "followup_status") "") "pending")))
-                          $tickets)]
-        (json-ok $rows)))))
+      (let [$company (cid $gate)
+            $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
+            $ctx (list-ctx $company)
+            $shown (map (fn [$t] (present-ticket $t $ctx)) $tickets)
+            $done? (fn [$t]
+                     (or (= (get $t "status") "done")
+                         (= (get $t "status") "followup")
+                         (= (get $t "status") "closed")))
+            $repeat (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $shown)
+            $photo (filter (fn [$t]
+                             (and ($done? $t)
+                                  (or (< (count-photos (get $t "ticket_id") "before") 3)
+                                      (< (count-photos (get $t "ticket_id") "after") 3))))
+                           $shown)
+            $unpaid (filter (fn [$t]
+                              (and (= (get $t "status") "done")
+                                   (= (?? (get $t "settlement_status") "") "미수")))
+                            $shown)]
+        (json-ok {"repeat" $repeat "photo" $photo "unpaid" $unpaid})))))
 
 (defn handle-hq-login-page [$req] (serve-hq "login.html"))
 (defn handle-hq-app-page [$req] (serve-hq "app.html"))
@@ -992,6 +1062,7 @@
 (server-post "/hq/me/password" "handle-me-password")
 (server-post "/hq/me/day-close" "handle-day-close")
 (server-get "/hq/me/day-close" "handle-day-close-get")
+(server-get "/hq/day-close" "handle-day-close-lookup")
 (server-get "/hq/contractors" "handle-contractors-list")
 (server-post "/hq/contractors" "handle-contractor-create")
 

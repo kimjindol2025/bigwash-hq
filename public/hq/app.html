@@ -120,6 +120,7 @@
       <div>
         <strong id="title">대시보드</strong>
         <div class="muted mono" id="meta" style="font-size:11px"></div>
+        <div class="muted" id="alerts" style="font-size:12px;margin-top:4px">알림 불러오는 중</div>
       </div>
       <button class="btn btn-sm" type="button" id="btnRefresh">새로고침</button>
     </div>
@@ -275,6 +276,12 @@
   async function loadContractors() {
     return cached('contractors', '/hq/contractors');
   }
+  function whoLabel(t) {
+    const name = (t && t.assignee_name) || '';
+    const n = Number((t && t.companion_count) || 0);
+    if (!name) return '미배정';
+    return n > 0 ? (name + ' +' + n) : name;
+  }
   function staffOptions(selected) {
     return '<option value="">미배정</option>' + staff.map((u) =>
       '<option value="' + esc(u.user_id) + '"' + (selected === u.user_id ? ' selected' : '') + '>' +
@@ -340,6 +347,8 @@
       '<button class="btn" type="button" id="goUnassigned">미지정 큐</button>' +
       '<button class="btn" type="button" id="goUnpaid">미수 목록</button></div>' +
       (d.cached ? '<div class="muted mono" style="margin-top:8px;font-size:11px">cached</div>' : '');
+    const bell = document.getElementById('alerts');
+    if (bell) bell.textContent = '알림 · 미지정 ' + (d.unassigned || 0) + ' · 사진미비 ' + (d.photo_incomplete || 0) + ' · 미수 ' + (d.unpaid || 0);
     document.getElementById('goDesk').onclick = () => showPanel('desk');
     document.getElementById('goUnassigned').onclick = () => { showPanel('board'); renderBoard('waiting_assign'); };
     document.getElementById('goUnpaid').onclick = () => { showPanel('settle'); renderSettle('unpaid'); };
@@ -685,10 +694,12 @@
     const rows = await api('/hq/tickets' + q);
     const box = document.getElementById('blist');
     if (!rows.length) { box.innerHTML = '<div class="empty">티켓 없음</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>담당</th></tr></thead><tbody>' +
+    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>고객표시명</th><th>증상</th><th>담당이름</th><th>방문일시</th><th>정산뱃지</th></tr></thead><tbody>' +
       rows.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) +
-        '</td><td>' + badge(t.status) + '</td><td>' + esc(t.symptom) +
-        '</td><td class="mono">' + esc(t.assignee_id || '-') + '</td></tr>').join('') + '</tbody></table>';
+        '</td><td>' + badge(t.status) + '</td><td>' + esc(t.customer_display_name || '') +
+        '</td><td>' + esc(t.symptom) + '</td><td>' + esc(whoLabel(t)) +
+        '</td><td class="mono">' + esc(t.visit_at || t.scheduled_at || '') +
+        '</td><td>' + esc(t.settlement_status || '정산없음') + '</td></tr>').join('') + '</tbody></table>';
     box.querySelectorAll('tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
   }
 
@@ -774,8 +785,11 @@
 
       <div class="card" style="padding:12px">
         <h4 style="margin:0 0 8px">3. 일지 · 사진</h4>
+        <div id="dCloseLine" class="muted">마감: 조회 중</div>
+        <div style="margin:6px 0">사진 전 <b id="nBefore">0</b> / 후 <b id="nAfter">0</b></div>
+        <div style="margin-bottom:8px"><b>출장일지</b><div id="dLogBody">${esc(t.work_note || fin.work_log || '없음')}</div></div>
         <label>출장 일지</label>
-        <textarea id="dWorkLog" rows="4">${esc(fin.work_log || '')}</textarea>
+        <textarea id="dWorkLog" rows="4">${esc(t.work_note || fin.work_log || '')}</textarea>
         <label style="margin-top:8px">일지 파일 (이미지/PDF)</label>
         <input id="dLogFile" type="file" accept="image/*,application/pdf" />
         <div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dLogSave">일지 저장</button></div>
@@ -819,9 +833,13 @@
       if (force) asgCache = asg;
       document.getElementById('dAsgList').innerHTML = (asg || []).length
         ? '<table><thead><tr><th>구분</th><th>이름/ID</th><th>주</th><th>일당</th></tr></thead><tbody>' +
-          asg.map((a) => '<tr><td>' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td>' +
-            esc(a.contractor_name || a.user_id) + '</td><td>' + (a.is_primary === 'true' ? '주담당' : '') +
-            '</td><td>' + esc(a.day_pay_amount || '-') + '</td></tr>').join('') + '</tbody></table>'
+          asg.map((a) => {
+            const staffName = ((staff || []).find((u) => u.user_id === a.user_id) || {}).name || '';
+            const shown = a.kind === 'contractor' ? (a.contractor_name || '용병') : (staffName || '이름없음');
+            return '<tr><td>' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td>' +
+              esc(shown) + '</td><td>' + (a.is_primary === 'true' ? '주담당' : '') +
+              '</td><td>' + esc(a.day_pay_amount || '-') + '</td></tr>';
+          }).join('') + '</tbody></table>'
         : '<div class="muted">배정 내역 없음</div>';
 
       // preselect staff already assigned
@@ -846,12 +864,16 @@
         async function refreshPhotos(force) {
       const det = force ? await api('/hq/tickets/' + id) : data;
       const photos = (det.photos || []).filter((p) => p.side === 'before' || p.side === 'after' || p.side === 'log');
+      const before = photos.filter((p) => p.side === 'before').sort((a,b) => Number(a.slot)-Number(b.slot));
+      const after = photos.filter((p) => p.side === 'after').sort((a,b) => Number(a.slot)-Number(b.slot));
+      const nb = document.getElementById('nBefore');
+      const na = document.getElementById('nAfter');
+      if (nb) nb.textContent = String(before.length);
+      if (na) na.textContent = String(after.length);
       if (!photos.length) {
         document.getElementById('dPhotos').innerHTML = '<span class="muted">사진 없음</span>';
         return;
       }
-      const before = photos.filter((p) => p.side === 'before').sort((a,b) => Number(a.slot)-Number(b.slot));
-      const after = photos.filter((p) => p.side === 'after').sort((a,b) => Number(a.slot)-Number(b.slot));
       const logs = photos.filter((p) => p.side === 'log');
       document.getElementById('dPhotos').innerHTML = '<div class="muted" style="margin-bottom:4px">작업 전</div><div class="photo-grid" id="phBefore"></div>' +
         '<div class="muted" style="margin:10px 0 4px">작업 후</div><div class="photo-grid" id="phAfter"></div>' +
@@ -888,6 +910,23 @@
 
     await refreshAsgCart(true);
     await refreshPhotos(true);
+    if (t.assignee_id) {
+      const z = (n) => String(n).padStart(2, '0');
+      const now = new Date();
+      const day = now.getFullYear() + '-' + z(now.getMonth() + 1) + '-' + z(now.getDate());
+      api('/hq/day-close?user_id=' + encodeURIComponent(t.assignee_id) + '&day=' + day)
+        .then((row) => {
+          const el = document.getElementById('dCloseLine');
+          if (el) el.textContent = '마감: ' + (row.label || '없음');
+        })
+        .catch(() => {
+          const el = document.getElementById('dCloseLine');
+          if (el) el.textContent = '마감: 없음';
+        });
+    } else {
+      const el = document.getElementById('dCloseLine');
+      if (el) el.textContent = '마감: 없음';
+    }
 
     document.getElementById('dAsgSave').onclick = async () => {
       const sel = [...document.getElementById('dAddStaff').selectedOptions].map((o) => o.value).filter(Boolean);
@@ -1459,9 +1498,11 @@
     let html = '';
     if (conflicts.length) html += '<div class="empty" style="color:#ff8a95">충돌 경고 ' + conflicts.length + '건 (저장은 됨)</div>';
     html += mine.length
-      ? '<table><thead><tr><th>시각</th><th>번호</th><th>상태</th><th></th></tr></thead><tbody>' +
-        mine.map((t) => '<tr><td class="mono">' + esc(t.scheduled_at) + '</td><td class="mono">' + esc(t.number) +
-          '</td><td>' + badge(t.status) + '</td><td><button class="btn btn-sm" type="button" data-open="' +
+      ? '<table><thead><tr><th>시각</th><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산뱃지</th><th></th></tr></thead><tbody>' +
+        mine.map((t) => '<tr><td class="mono">' + esc(t.visit_at || t.scheduled_at) + '</td><td class="mono">' + esc(t.number) +
+          '</td><td>' + esc(t.customer_display_name || '') + '</td><td>' + esc(whoLabel(t)) +
+          '</td><td>' + badge(t.status) + '</td><td>' + esc(t.settlement_status || '정산없음') +
+          '</td><td><button class="btn btn-sm" type="button" data-open="' +
           esc(t.ticket_id) + '">서랍</button></td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">이 날짜 일정 없음</div>';
     document.getElementById('schList').innerHTML = html;
@@ -1470,9 +1511,10 @@
     const all = await api('/hq/tickets');
     const pool = all.filter((t) => t.status !== 'closed' && t.status !== 'cancelled' && !t.scheduled_at);
     document.getElementById('schPool').innerHTML = pool.length
-      ? '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
-        pool.slice(0, 40).map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) +
-          '</td><td>' + esc(t.symptom) + '</td><td><button class="btn btn-sm btn-primary" type="button" data-give="' +
+      ? '<table><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
+        pool.slice(0, 40).map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + esc(t.customer_display_name || '') +
+          '</td><td>' + esc(whoLabel(t)) + '</td><td>' + esc(t.symptom) +
+          '</td><td><button class="btn btn-sm btn-primary" type="button" data-give="' +
           esc(t.ticket_id) + '">부여</button></td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">미일정 티켓 없음</div>';
     document.querySelectorAll('[data-give]').forEach((b) => b.onclick = async () => {
@@ -1856,16 +1898,23 @@
   }
 
   async function renderFollowup() {
-    const rows = await api('/hq/followups');
-    const el = document.getElementById('p-followup');
-    el.innerHTML = '<div class="card"><h3>사후함</h3><div id="fList"></div></div>';
-    document.getElementById('fList').innerHTML = rows.length
-      ? '<table><thead><tr><th>번호</th><th>상태</th><th>사진미비</th><th></th></tr></thead><tbody>' +
-        rows.map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) + '</td><td>' +
-          esc(t.photo_incomplete) + '</td><td><button class="btn btn-sm" type="button" data-id="' + esc(t.ticket_id) +
-          '">열기</button></td></tr>').join('') + '</tbody></table>'
+    const data = await api('/hq/followups');
+    const groups = [
+      ['repeat', '재고장 30일'],
+      ['photo', '사진미비'],
+      ['unpaid', '완료·미수']
+    ];
+    const table = (rows) => (rows && rows.length)
+      ? '<table><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산</th><th></th></tr></thead><tbody>' +
+        rows.map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + esc(t.customer_display_name || '') +
+          '</td><td>' + esc(whoLabel(t)) + '</td><td>' + badge(t.status) + '</td><td>' + esc(t.settlement_status || '') +
+          '</td><td><button class="btn btn-sm" type="button" data-id="' + esc(t.ticket_id) + '">열기</button></td></tr>').join('') +
+        '</tbody></table>'
       : '<div class="empty">없음</div>';
-    document.querySelectorAll('#fList [data-id]').forEach((b) => b.onclick = () => openTicket(b.dataset.id));
+    const el = document.getElementById('p-followup');
+    el.innerHTML = groups.map(([k, title]) =>
+      '<div class="card"><h3>' + title + '</h3>' + table(data[k] || []) + '</div>').join('');
+    el.querySelectorAll('[data-id]').forEach((b) => b.onclick = () => openTicket(b.dataset.id));
   }
 
   async function renderSettings() {
