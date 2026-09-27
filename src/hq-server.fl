@@ -725,6 +725,8 @@
                 $unpaid (length (filter (fn [$f] (or (= (get $f "settlement_status") "미수")
                                                      (= (get $f "settlement_status") "부분수금"))) $fins))
                 $no-doc (length (filter (fn [$f] (not (= (?? (get $f "doc_ready") "") "true"))) $fins))
+                $exps (db-rows (db-query "hq_expenses" {"company_id" $company}))
+                $exp-pending (length (filter (fn [$e] (= (?? (get $e "status") "") "pending")) $exps))
                 $staff-load (length (filter (fn [$t]
                                               (and (not (= (?? (get $t "assignee_id") "") ""))
                                                    (not (= (get $t "status") "closed"))
@@ -739,7 +741,7 @@
                        "repeats" $repeats
                        "followup" $followup
                        "unpaid" $unpaid
-                       "expense_pending" 0
+                       "expense_pending" $exp-pending
                        "doc_incomplete" $no-doc
                        "staff_load" $staff-load
                        "cached" false
@@ -906,6 +908,7 @@
 (server-get "/hq/opex" "handle-opex-list")
 (server-post "/hq/opex" "handle-opex-create")
 (server-get "/hq/unpaid" "handle-unpaid-list")
+(server-get "/hq/settlements" "handle-settlements")
 (server-get "/hq/reports" "handle-report")
 
 (server-post "/hq/purchases" "handle-purchase-create")

@@ -141,6 +141,7 @@
             $patch (assoc (assoc $body "region_id" $region) "travel_fee" $fee)
             $row (finance-upsert! (cid $gate) $id $patch)]
         (add-event! (cid $gate) $id (uid $gate) "finance" "" "" (str "권역/정산 갱신 fee=" $fee))
+        (bust-dash-cache! (cid $gate))
         (json-ok $row)))))
 
 (defn handle-doc-issue [$req]
@@ -265,6 +266,9 @@
       (json-err (get $gate "status") (get $gate "error"))
       (json-ok (db-rows (db-query "hq_expenses" {"company_id" (cid $gate)}))))))
 
+(defn bust-dash-cache! [$company]
+  (try (file-write (str "/tmp/bigwash-hq-dash-" $company ".json") "{}") (catch $e nil)))
+
 (defn handle-expense-create [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
@@ -281,6 +285,7 @@
                   "created_at" (iso-now)
                   "decided_at" ""}]
         (db-insert "hq_expenses" $row)
+        (bust-dash-cache! (cid $gate))
         (json-created $row)))))
 
 (defn handle-expense-decide [$req]
@@ -296,39 +301,8 @@
             (json-err 400 "status approved|rejected")
             (do
               (db-patch "hq_expenses" $id {"status" $st "decided_at" (iso-now)})
+              (bust-dash-cache! (cid $gate))
               (json-ok {"expense_id" $id "status" $st}))))))))
-
-(defn handle-payroll-upsert [$req]
-  (let [$gate (require-user $req)]
-    (if (not (get $gate "ok"))
-      (json-err (get $gate "status") (get $gate "error"))
-      (let [$body (req-body $req)
-            $uid (?? (get $body "user_id") "")
-            $ym (?? (get $body "year_month") "")
-            $base (?? (get $body "base_pay") 0)
-            $allow (?? (get $body "allowances") 0)
-            $ded (?? (get $body "deductions") 0)
-            $total (+ $base (- $allow $ded))]
-        (if (or (= $uid "") (= $ym ""))
-          (json-err 400 "user_id and year_month required")
-          (let [$id (str "pay-" $uid "-" $ym)
-                $existing (db-row (db-get-row "hq_payroll" $id))
-                $row {"payroll_id" $id
-                      "company_id" (cid $gate)
-                      "user_id" $uid
-                      "year_month" $ym
-                      "base_pay" $base
-                      "allowances" $allow
-                      "deductions" $ded
-                      "total" $total
-                      "note" (?? (get $body "note") "")
-                      "created_at" (iso-now)}]
-            (if (nil? $existing)
-              (do (db-insert "hq_payroll" $row) (json-created $row))
-              (do (db-patch "hq_payroll" $id
-                            {"base_pay" $base "allowances" $allow "deductions" $ded "total" $total
-                             "note" (get $row "note")})
-                  (json-ok (assoc $row "total" $total))))))))))
 
 (defn handle-payroll-list [$req]
   (let [$gate (require-user $req)]
@@ -352,6 +326,7 @@
                   "memo" (?? (get $body "memo") "")
                   "created_at" (iso-now)}]
         (db-insert "hq_opex" $row)
+        (bust-dash-cache! (cid $gate))
         (json-created $row)))))
 
 (defn handle-opex-list [$req]
@@ -359,6 +334,36 @@
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
       (json-ok (db-rows (db-query "hq_opex" {"company_id" (cid $gate)}))))))
+
+(defn can-edit-money? [$gate]
+  (let [$r (?? (get (get $gate "user") "role") "")]
+    (or (= $r "admin") (= $r "accountant") (= $r "finance") (= $r "manager"))))
+
+(defn doc-total-for-ticket [$tid]
+  (let [$docs (db-rows (db-query "hq_documents" {"ticket_id" $tid}))]
+    (if (= (length $docs) 0)
+      0
+      (?? (get (get $docs 0) "total") 0))))
+
+(defn enrich-settlement-row [$f]
+  (let [$tid (get $f "ticket_id")
+        $t (db-row (db-get-row "hq_tickets" $tid))
+        $c (if (nil? $t) nil (db-row (db-get-row "hq_customers" (get $t "customer_id"))))
+        $doc-total (doc-total-for-ticket $tid)
+        $travel (?? (get $f "travel_fee") 0)
+        $total (if (> $doc-total 0) $doc-total $travel)]
+    {"ticket_id" $tid
+     "number" (if (nil? $t) $tid (?? (get $t "number") $tid))
+     "customer_id" (if (nil? $t) "" (get $t "customer_id"))
+     "customer_name" (if (nil? $c) "" (?? (get $c "display_name") ""))
+     "scheduled_at" (if (nil? $t) "" (?? (get $t "scheduled_at") ""))
+     "completed_at" (if (nil? $t) "" (?? (get $t "completed_at") ""))
+     "travel_fee" $travel
+     "repair_total" $doc-total
+     "total" $total
+     "settlement_status" (?? (get $f "settlement_status") "")
+     "settlement_paid" (?? (get $f "settlement_paid") 0)
+     "settlement_method" (?? (get $f "settlement_method") "")}))
 
 (defn handle-unpaid-list [$req]
   (let [$gate (require-user $req)]
@@ -369,13 +374,90 @@
                               (or (= (get $f "settlement_status") "미수")
                                   (= (get $f "settlement_status") "부분수금")))
                             $fins)]
-        (json-ok $unpaid)))))
+        (json-ok (map enrich-settlement-row $unpaid))))))
+
+(defn handle-settlements [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tab (?? (server-req-query $req "tab") "unpaid")
+            $period (?? (server-req-query $req "period") "month")
+            $fins (db-rows (db-query "hq_ticket_finance" {"company_id" (cid $gate)}))
+            $today (slice (iso-now) 0 10)
+            $ym (slice (iso-now) 0 7)
+            $rows (cond
+                    [(= $tab "unpaid")
+                     (filter (fn [$f]
+                               (or (= (get $f "settlement_status") "미수")
+                                   (= (get $f "settlement_status") "부분수금")))
+                             $fins)]
+                    [(= $tab "collected")
+                     (filter (fn [$f]
+                               (let [$st (?? (get $f "settlement_status") "")
+                                     $ok (or (= $st "카드완납") (= $st "계좌완납") (= $st "현금완납")
+                                             (= $st "부분수금") (= $st "해당없음"))
+                                     $enriched (enrich-settlement-row $f)
+                                     $day (slice (?? (get $enriched "completed_at") (?? (get $enriched "scheduled_at") "")) 0 10)]
+                                 (and $ok
+                                      (or (= $period "all")
+                                          (and (= $period "today") (str-starts-with $day $today))
+                                          (and (= $period "month") (str-starts-with $day $ym))
+                                          (= $period "week")))))
+                             $fins)]
+                    [true []])
+            $enriched (map enrich-settlement-row $rows)
+            $sum-travel (reduce (fn [$a $r] (+ $a (?? (get $r "travel_fee") 0))) 0 $enriched)
+            $sum-repair (reduce (fn [$a $r] (+ $a (?? (get $r "repair_total") 0))) 0 $enriched)
+            $sum-paid (reduce (fn [$a $r] (+ $a (?? (get $r "settlement_paid") 0))) 0 $enriched)]
+        (json-ok {"tab" $tab
+                  "period" $period
+                  "rows" $enriched
+                  "sum_travel" $sum-travel
+                  "sum_repair" $sum-repair
+                  "sum_paid" $sum-paid})))))
+
+(defn handle-payroll-upsert [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (if (not (can-edit-money? $gate))
+        (json-err 403 "payroll edit requires admin/accountant")
+        (let [$body (req-body $req)
+              $uid (?? (get $body "user_id") "")
+              $ym (?? (get $body "year_month") "")
+              $base (?? (get $body "base_pay") 0)
+              $allow (?? (get $body "allowances") 0)
+              $ded (?? (get $body "deductions") 0)
+              $total (+ $base (- $allow $ded))]
+          (if (or (= $uid "") (= $ym ""))
+            (json-err 400 "user_id and year_month required")
+            (let [$id (str "pay-" $uid "-" $ym)
+                  $existing (db-row (db-get-row "hq_payroll" $id))
+                  $row {"payroll_id" $id
+                        "company_id" (cid $gate)
+                        "user_id" $uid
+                        "year_month" $ym
+                        "base_pay" $base
+                        "allowances" $allow
+                        "deductions" $ded
+                        "total" $total
+                        "note" (?? (get $body "note") "")
+                        "created_at" (iso-now)}]
+              (if (nil? $existing)
+                (do (db-insert "hq_payroll" $row)
+                    (bust-dash-cache! (cid $gate))
+                    (json-created $row))
+                (do (db-patch "hq_payroll" $id
+                              {"base_pay" $base "allowances" $allow "deductions" $ded "total" $total
+                               "note" (get $row "note")})
+                    (bust-dash-cache! (cid $gate))
+                    (json-ok (assoc $row "total" $total)))))))))))
 
 (defn handle-report [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$kind (?? (server-req-query $req "kind") "daily")
+      (let [$kind (?? (server-req-query $req "period") (?? (server-req-query $req "kind") "daily"))
             $company (cid $gate)
             $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
             $calls (db-rows (db-query "hq_call_logs" {"company_id" $company}))
@@ -385,34 +467,74 @@
             $fins (db-rows (db-query "hq_ticket_finance" {"company_id" $company}))
             $today (slice (iso-now) 0 10)
             $ym (slice (iso-now) 0 7)
+            $today-calls (length (filter (fn [$c] (str-starts-with (?? (get $c "created_at") "") $today)) $calls))
+            $today-tickets (length (filter (fn [$t] (str-starts-with (?? (get $t "created_at") "") $today)) $tickets))
+            $today-done (length (filter (fn [$t] (str-starts-with (?? (get $t "completed_at") "") $today)) $tickets))
+            $open (length (filter (fn [$t]
+                                    (and (not (= (get $t "status") "closed"))
+                                         (not (= (get $t "status") "cancelled")))) $tickets))
+            $today-exp (reduce (fn [$a $e] (+ $a (?? (get $e "amount") 0))) 0
+                               (filter (fn [$e] (str-starts-with (?? (get $e "created_at") "") $today)) $exps))
+            $today-paid (reduce (fn [$a $f] (+ $a (?? (get $f "settlement_paid") 0))) 0
+                                (filter (fn [$f]
+                                          (let [$en (enrich-settlement-row $f)]
+                                            (str-starts-with (?? (get $en "completed_at") "") $today)))
+                                        $fins))
+            $unpaid-n (length (filter (fn [$f]
+                                        (or (= (get $f "settlement_status") "미수")
+                                            (= (get $f "settlement_status") "부분수금"))) $fins))
+            $pay-month (reduce (fn [$a $p] (+ $a (?? (get $p "total") 0))) 0
+                               (filter (fn [$p] (= (get $p "year_month") $ym)) $pays))
+            $opex-month (reduce (fn [$a $o] (+ $a (?? (get $o "amount") 0))) 0
+                                (filter (fn [$o] (= (get $o "year_month") $ym)) $opex))
+            $exp-month (reduce (fn [$a $e] (+ $a (?? (get $e "amount") 0))) 0
+                               (filter (fn [$e] (and (= (get $e "status") "approved")
+                                                     (str-starts-with (?? (get $e "created_at") "") $ym))) $exps))
+            $travel-month (reduce (fn [$a $f] (+ $a (?? (get $f "travel_fee") 0))) 0
+                                  (filter (fn [$f]
+                                            (let [$en (enrich-settlement-row $f)]
+                                              (str-starts-with (?? (get $en "completed_at") (?? (get $en "scheduled_at") "")) $ym)))
+                                          $fins))
+            $repeats (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
+            $summary (cond
+                       [(or (= $kind "daily") (= $kind "day"))
+                        {"period" "daily"
+                         "today_calls" $today-calls
+                         "today_tickets" $today-tickets
+                         "today_done" $today-done
+                         "open" $open
+                         "today_paid" $today-paid
+                         "today_expense" $today-exp}]
+                       [(or (= $kind "weekly") (= $kind "week"))
+                        {"period" "weekly"
+                         "open" $open
+                         "unpaid" $unpaid-n
+                         "travel_sum" $travel-month
+                         "tickets" (length $tickets)}]
+                       [true
+                        {"period" "monthly"
+                         "as_count" (length $tickets)
+                         "repeats" $repeats
+                         "paid_sum" (reduce (fn [$a $f] (+ $a (?? (get $f "settlement_paid") 0))) 0 $fins)
+                         "ops_sum" (+ $travel-month (+ $opex-month $exp-month))
+                         "payroll_total" $pay-month
+                         "unpaid" $unpaid-n}])
             $csv (cond
-                   [(= $kind "daily")
-                    (str "date,calls,tickets,done\n"
-                         $today ","
-                         (length (filter (fn [$c] (str-starts-with (?? (get $c "created_at") "") $today)) $calls)) ","
-                         (length (filter (fn [$t] (str-starts-with (?? (get $t "created_at") "") $today)) $tickets)) ","
-                         (length (filter (fn [$t] (str-starts-with (?? (get $t "completed_at") "") $today)) $tickets))
-                         "\n")]
-                   [(= $kind "weekly")
-                    (str "assignee,open,done\n"
+                   [(or (= $kind "daily") (= $kind "day"))
+                    (str "지표,값\n오늘콜," $today-calls "\n오늘출장," $today-tickets "\n완료," $today-done
+                         "\n미처리," $open "\n당일수금," $today-paid "\n당일경비," $today-exp "\n")]
+                   [(or (= $kind "weekly") (= $kind "week"))
+                    (str "assignee_id,status,number\n"
                          (reduce (fn [$a $t]
                                    (str $a (?? (get $t "assignee_id") "none") "," (get $t "status") "," (get $t "number") "\n"))
                                  ""
                                  $tickets))]
                    [true
-                    (str "year_month,payroll_total,opex_total,expense_approved,tickets,repeats\n"
-                         $ym ","
-                         (reduce (fn [$a $p] (+ $a (?? (get $p "total") 0))) 0
-                                 (filter (fn [$p] (= (get $p "year_month") $ym)) $pays)) ","
-                         (reduce (fn [$a $o] (+ $a (?? (get $o "amount") 0))) 0
-                                 (filter (fn [$o] (= (get $o "year_month") $ym)) $opex)) ","
-                         (reduce (fn [$a $e] (+ $a (?? (get $e "amount") 0))) 0
-                                 (filter (fn [$e] (and (= (get $e "status") "approved")
-                                                       (str-starts-with (?? (get $e "created_at") "") $ym))) $exps)) ","
-                         (length $tickets) ","
-                         (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
-                         "\n")])]
-        (json-ok {"kind" $kind "csv" $csv "format" "excel-csv"})))))
+                    (str "지표,값\nAS건수," (length $tickets) "\n재고장," $repeats
+                         "\n수금합," (reduce (fn [$a $f] (+ $a (?? (get $f "settlement_paid") 0))) 0 $fins)
+                         "\n출장운영경비," (+ $travel-month (+ $opex-month $exp-month))
+                         "\n급여총액," $pay-month "\n미수," $unpaid-n "\n")])]
+        (json-ok {"kind" $kind "period" $kind "summary" $summary "csv" $csv "format" "excel-csv"})))))
 
 ;; ===== v2: purchases / assignees / cart / contractors / warranty =====
 

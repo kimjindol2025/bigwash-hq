@@ -309,27 +309,29 @@
   // ----- Dashboard -----
   function paintDashboard(d) {
     const cards = [
-      ['today_calls','오늘 콜','desk'],
-      ['today_visits','오늘 출장','schedule'],
-      ['unassigned','미지정','board'],
-      ['delayed','지연','board'],
-      ['doc_incomplete','완료미제출','board'],
-      ['photo_incomplete','사진미비','followup'],
-      ['unpaid','미수','settle'],
-      ['expense_pending','경비대기','settle'],
-      ['today_done','오늘 완료','board'],
-      ['repeats','재고장30일','board'],
-      ['staff_load','직원부하','users']
+      ['today_calls','오늘 콜','desk',''],
+      ['today_visits','오늘 출장','schedule',''],
+      ['unassigned','미지정','board','waiting_assign'],
+      ['delayed','지연','board',''],
+      ['doc_incomplete','완료미제출','board',''],
+      ['photo_incomplete','사진미비','followup',''],
+      ['unpaid','미수','settle','unpaid'],
+      ['expense_pending','경비대기','settle','expenses'],
+      ['today_done','오늘 완료','board',''],
+      ['repeats','재고장30일','board',''],
+      ['staff_load','직원부하','users','']
     ];
-    document.getElementById('dash').innerHTML = cards.map(([k,l,go]) =>
-      '<div class="stat" data-go="' + go + '"><div class="v">' + esc(d[k] != null ? d[k] : 0) +
+    document.getElementById('dash').innerHTML = cards.map(([k,l,go,tab]) =>
+      '<div class="stat" data-go="' + go + '" data-tab="' + tab + '"><div class="v">' + esc(d[k] != null ? d[k] : 0) +
       '</div><div class="l">' + l + '</div></div>'
     ).join('');
     document.querySelectorAll('#dash .stat').forEach((el) => {
       el.onclick = () => {
-        if (el.dataset.go === 'board' && el.querySelector('.l').textContent.indexOf('미지정') >= 0)
-          showPanel('board'), renderBoard('waiting_assign');
-        else showPanel(el.dataset.go);
+        const go = el.dataset.go;
+        const tab = el.dataset.tab || '';
+        showPanel(go);
+        if (go === 'board' && tab) renderBoard(tab);
+        else if (go === 'settle') renderSettle(tab || 'unpaid');
       };
     });
     document.getElementById('dashExtra').innerHTML =
@@ -1275,27 +1277,96 @@
     await run();
   }
 
+  function canEditMoney() {
+    const r = (user && user.role) || '';
+    return r === 'admin' || r === 'accountant' || r === 'finance' || r === 'manager';
+  }
+
   async function renderUsers() {
-    const rows = await api('/hq/users');
+    const ym = new Date().toISOString().slice(0, 7);
+    const [rows, pays, contractors] = await Promise.all([
+      api('/hq/users'),
+      api('/hq/payroll?year_month=' + encodeURIComponent(ym)).catch(() => []),
+      api('/hq/contractors').catch(() => [])
+    ]);
+    const payByUser = {};
+    (pays || []).forEach((p) => { payByUser[p.user_id] = p; });
     const el = document.getElementById('p-users');
+    const money = canEditMoney();
     el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between">
       <h3>직원</h3><button class="btn btn-primary" type="button" id="uAdd">＋ 직원 등록</button></div>
-      <div id="uList"></div></div>`;
-    document.getElementById('uList').innerHTML =
-      '<table><thead><tr><th>이름</th><th>로그인</th><th>역할</th><th>재직</th><th></th></tr></thead><tbody>' +
-      rows.map((u) => '<tr><td>' + esc(u.name) + '</td><td class="mono">' + esc(u.login) + '</td><td>' + esc(u.role) +
-        '</td><td>' + esc(u.employment_status) + '</td><td>' +
-        (u.employment_status === 'active'
-          ? '<button class="btn btn-sm" type="button" data-leave="' + esc(u.user_id) + '">휴직</button> ' +
-            '<button class="btn btn-sm btn-danger" type="button" data-out="' + esc(u.user_id) + '">퇴사</button>'
-          : '') + '</td></tr>').join('') + '</tbody></table>';
+      <div id="uList"></div></div>
+      <div class="card"><h3>용병 (급여대장 없음 · 출장 일당만)</h3><div id="uCtr"></div></div>`;
+    document.getElementById('uList').innerHTML = rows.map((u) => {
+      const p = payByUser[u.user_id] || {};
+      const base = p.base_pay != null ? p.base_pay : '';
+      const allow = p.allowances != null ? p.allowances : 0;
+      const ded = p.deductions != null ? p.deductions : 0;
+      const total = (Number(base || 0) + Number(allow || 0) - Number(ded || 0));
+      const payBlock = `
+        <div class="desk-section" data-pay-wrap="${esc(u.user_id)}">
+          <h4>급여 · ${esc(ym)}</h4>
+          <div class="row">
+            <div class="grow"><label>기본급</label><input type="number" data-pb="${esc(u.user_id)}" value="${esc(base)}" ${money ? '' : 'readonly'} /></div>
+            <div class="grow"><label>수당</label><input type="number" data-pa="${esc(u.user_id)}" value="${esc(allow)}" ${money ? '' : 'readonly'} /></div>
+            <div class="grow"><label>공제</label><input type="number" data-pd="${esc(u.user_id)}" value="${esc(ded)}" ${money ? '' : 'readonly'} /></div>
+            <div class="grow"><label>지급총액</label><input type="number" data-pt="${esc(u.user_id)}" value="${esc(total)}" readonly /></div>
+          </div>
+          <label style="margin-top:8px">메모</label>
+          <input data-pn="${esc(u.user_id)}" value="${esc(p.note || '')}" ${money ? '' : 'readonly'} />
+          ${money ? '<div class="actions"><button class="btn btn-primary btn-sm" type="button" data-psave="' + esc(u.user_id) + '">급여 저장</button></div>' : '<div class="muted" style="margin-top:8px;font-size:12px">경리·관리자만 편집</div>'}
+        </div>`;
+      return `<div class="card" style="margin-top:10px">
+        <div class="actions" style="justify-content:space-between;align-items:center">
+          <div><b>${esc(u.name)}</b> <span class="muted mono">${esc(u.login)}</span>
+            <span class="badge">${esc(u.role)}</span> <span class="badge">${esc(u.employment_status)}</span></div>
+          <div>${u.employment_status === 'active'
+            ? '<button class="btn btn-sm" type="button" data-leave="' + esc(u.user_id) + '">휴직</button> ' +
+              '<button class="btn btn-sm btn-danger" type="button" data-out="' + esc(u.user_id) + '">퇴사</button>'
+            : ''}</div>
+        </div>${payBlock}</div>`;
+    }).join('') || '<div class="empty">직원 없음</div>';
+    document.getElementById('uCtr').innerHTML = (contractors || []).length
+      ? '<table><thead><tr><th>이름</th><th>전화</th><th>상태</th></tr></thead><tbody>' +
+        contractors.map((c) => '<tr><td>' + esc(c.name) + '</td><td class="mono">' + esc(c.phone || '') +
+          '</td><td>' + esc(c.status || '') + '</td></tr>').join('') + '</tbody></table>'
+      : '<div class="empty">등록된 용병 없음</div>';
+
+    const recalc = (uid) => {
+      const b = Number(document.querySelector('[data-pb="' + uid + '"]').value || 0);
+      const a = Number(document.querySelector('[data-pa="' + uid + '"]').value || 0);
+      const d = Number(document.querySelector('[data-pd="' + uid + '"]').value || 0);
+      document.querySelector('[data-pt="' + uid + '"]').value = String(b + a - d);
+    };
+    document.querySelectorAll('[data-pb],[data-pa],[data-pd]').forEach((inp) => {
+      inp.oninput = () => recalc(inp.dataset.pb || inp.dataset.pa || inp.dataset.pd);
+    });
+    document.querySelectorAll('[data-psave]').forEach((b) => {
+      b.onclick = async () => {
+        const uid = b.dataset.psave;
+        try {
+          await api('/hq/payroll', { method: 'POST', body: JSON.stringify({
+            user_id: uid,
+            year_month: ym,
+            base_pay: Number(document.querySelector('[data-pb="' + uid + '"]').value || 0),
+            allowances: Number(document.querySelector('[data-pa="' + uid + '"]').value || 0),
+            deductions: Number(document.querySelector('[data-pd="' + uid + '"]').value || 0),
+            note: document.querySelector('[data-pn="' + uid + '"]').value || ''
+          })});
+          try { sessionStorage.removeItem('hq_dash_cache_v2'); } catch (_) {}
+          toast('급여 저장');
+          renderUsers();
+        } catch (e) { toast(e.message, true); }
+      };
+    });
     document.getElementById('uAdd').onclick = () => {
       showModal(`<h3>직원 등록</h3>
         <label>로그인</label><input id="nuLogin" />
         <label style="margin-top:8px">이름</label><input id="nuName" />
         <label style="margin-top:8px">역할</label>
         <select id="nuRole"><option value="technician">기사</option><option value="dispatcher">배차</option>
-        <option value="counselor">상담</option><option value="admin">관리자</option></select>
+        <option value="counselor">상담</option><option value="accountant">경리</option>
+        <option value="admin">관리자</option></select>
         <label style="margin-top:8px">비밀번호</label><input id="nuPass" value="tech123" />
         <div class="actions"><button class="btn" type="button" id="nuCancel">취소</button>
         <button class="btn btn-primary" type="button" id="nuSave">저장</button></div>`);
@@ -1505,99 +1576,260 @@
     };
   }
 
-  async function renderSettle(tab) {
+  const SETTLE_BADGES = ['카드완납', '계좌완납', '현금완납', '부분수금', '미수', '해당없음'];
+  const EXP_CATS = ['식대', '유류', '주차', '기타'];
+  const OPEX_CATS = ['임대', '차량·유류', '부품매입', '통신·유틸', '기타'];
+
+  function moneyFmt(n) {
+    const v = Number(n || 0);
+    return v.toLocaleString('ko-KR');
+  }
+
+  function bustDashClient() {
+    try { sessionStorage.removeItem('hq_dash_cache_v2'); } catch (_) {}
+  }
+
+  async function renderSettle(tab, opts) {
     const el = document.getElementById('p-settle');
+    const t = tab || 'unpaid';
+    const period = (opts && opts.period) || 'today';
+    const expFilter = (opts && opts.expFilter) || 'pending';
+    const opexYm = (opts && opts.opexYm) || new Date().toISOString().slice(0, 7);
+    const money = canEditMoney();
     el.innerHTML = `<div class="card"><div class="actions">
-      <button class="btn btn-sm" type="button" data-t="unpaid">미수</button>
-      <button class="btn btn-sm" type="button" data-t="expenses">경비</button>
-      <button class="btn btn-sm" type="button" data-t="payroll">급여</button>
-      <button class="btn btn-sm btn-primary" type="button" id="sExp">경비 신청</button>
-      <button class="btn btn-sm btn-primary" type="button" id="sPay">급여 입력</button>
+      <button class="btn btn-sm${t === 'unpaid' ? ' btn-primary' : ''}" type="button" data-t="unpaid">미수</button>
+      <button class="btn btn-sm${t === 'collected' ? ' btn-primary' : ''}" type="button" data-t="collected">출장수금</button>
+      <button class="btn btn-sm${t === 'expenses' ? ' btn-primary' : ''}" type="button" data-t="expenses">경비</button>
+      <button class="btn btn-sm${t === 'opex' ? ' btn-primary' : ''}" type="button" data-t="opex">운영비</button>
       </div><div id="sBody" style="margin-top:12px"></div></div>`;
     el.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => renderSettle(b.dataset.t));
-    document.getElementById('sExp').onclick = () => {
-      showModal(`<h3>경비 신청</h3><label>금액</label><input id="ea" type="number" />
-        <label style="margin-top:8px">항목</label><input id="ec" value="유류" />
-        <label style="margin-top:8px">메모</label><input id="em" />
-        <div class="actions"><button class="btn" type="button" id="ex">취소</button>
-        <button class="btn btn-primary" type="button" id="es">저장</button></div>`);
-      document.getElementById('ex').onclick = closeModal;
-      document.getElementById('es').onclick = async () => {
-        await api('/hq/expenses', { method: 'POST', body: JSON.stringify({
-          amount: Number(document.getElementById('ea').value || 0),
-          category: document.getElementById('ec').value, memo: document.getElementById('em').value
-        })});
-        toast('경비 신청'); closeModal(); renderSettle('expenses');
-      };
-    };
-    document.getElementById('sPay').onclick = async () => {
-      await loadStaff();
-      showModal(`<h3>급여 입력</h3><label>직원</label><select id="pu">${staffOptions()}</select>
-        <label style="margin-top:8px">월</label><input id="pym" value="${new Date().toISOString().slice(0,7)}" />
-        <label style="margin-top:8px">기본급</label><input id="pb" type="number" value="3000000" />
-        <label style="margin-top:8px">수당</label><input id="pa" type="number" value="0" />
-        <label style="margin-top:8px">공제</label><input id="pd" type="number" value="0" />
-        <div class="actions"><button class="btn" type="button" id="px">취소</button>
-        <button class="btn btn-primary" type="button" id="ps">저장</button></div>`);
-      document.getElementById('px').onclick = closeModal;
-      document.getElementById('ps').onclick = async () => {
-        await api('/hq/payroll', { method: 'POST', body: JSON.stringify({
-          user_id: document.getElementById('pu').value,
-          year_month: document.getElementById('pym').value,
-          base_pay: Number(document.getElementById('pb').value || 0),
-          allowances: Number(document.getElementById('pa').value || 0),
-          deductions: Number(document.getElementById('pd').value || 0)
-        })});
-        toast('급여 저장'); closeModal(); renderSettle('payroll');
-      };
-    };
     const body = document.getElementById('sBody');
-    if (tab === 'expenses') {
-      const rows = await api('/hq/expenses');
-      body.innerHTML = '<table><thead><tr><th>금액</th><th>항목</th><th>상태</th><th></th></tr></thead><tbody>' +
-        rows.map((e) => '<tr><td>' + esc(e.amount) + '</td><td>' + esc(e.category) + '</td><td>' + esc(e.status) +
-          '</td><td>' + (e.status === 'pending' ? '<button class="btn btn-sm" type="button" data-ap="' + esc(e.expense_id) + '">승인</button>' : '') +
-          '</td></tr>').join('') + '</tbody></table>';
-      body.querySelectorAll('[data-ap]').forEach((b) => b.onclick = async () => {
-        await api('/hq/expenses/' + b.dataset.ap + '/decide', { method: 'POST', body: JSON.stringify({ status: 'approved' }) });
-        toast('승인'); renderSettle('expenses');
-      });
-    } else if (tab === 'payroll') {
-      const rows = await api('/hq/payroll');
-      body.innerHTML = '<table><thead><tr><th>월</th><th>직원</th><th>기본</th><th>수당</th><th>공제</th><th>총액</th></tr></thead><tbody>' +
-        rows.map((p) => '<tr><td>' + esc(p.year_month) + '</td><td class="mono">' + esc(p.user_id) + '</td><td>' +
-          esc(p.base_pay) + '</td><td>' + esc(p.allowances) + '</td><td>' + esc(p.deductions) + '</td><td><b>' +
-          esc(p.total) + '</b></td></tr>').join('') + '</tbody></table>';
-    } else {
-      const rows = await api('/hq/unpaid');
+
+    if (t === 'unpaid') {
+      const data = await api('/hq/settlements?tab=unpaid');
+      const rows = data.rows || data || [];
       body.innerHTML = rows.length
-        ? '<table><thead><tr><th>티켓</th><th>정산</th><th>출장비</th><th>수금</th><th></th></tr></thead><tbody>' +
-          rows.map((r) => '<tr><td class="mono">' + esc(r.ticket_id) + '</td><td>' + esc(r.settlement_status) +
-            '</td><td>' + esc(r.travel_fee) + '</td><td>' + esc(r.settlement_paid) +
-            '</td><td><button class="btn btn-sm" type="button" data-t="' + esc(r.ticket_id) + '">열기</button></td></tr>').join('') +
-          '</tbody></table>'
+        ? '<table><thead><tr><th>티켓번호</th><th>고객</th><th>합계</th><th>받은액</th><th>정산</th><th></th></tr></thead><tbody>' +
+          rows.map((r) => {
+            const opts = SETTLE_BADGES.map((s) =>
+              '<option value="' + esc(s) + '"' + (r.settlement_status === s ? ' selected' : '') + '>' + esc(s) + '</option>'
+            ).join('');
+            return '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono">' + esc(r.number || r.ticket_id) +
+              '</td><td>' + esc(r.customer_name || '') + '</td><td>' + moneyFmt(r.total) +
+              '</td><td>' + moneyFmt(r.settlement_paid) +
+              '</td><td onclick="event.stopPropagation()"><select data-badge="' + esc(r.ticket_id) + '">' + opts +
+              '</select></td><td onclick="event.stopPropagation()"><button class="btn btn-sm" type="button" data-open="' +
+              esc(r.ticket_id) + '">열기</button></td></tr>';
+          }).join('') + '</tbody></table>'
         : '<div class="empty">미수 없음</div>';
-      body.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => openTicket(b.dataset.t));
+      body.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => openTicket(b.dataset.open));
+      body.querySelectorAll('[data-badge]').forEach((sel) => {
+        sel.onchange = async () => {
+          const st = sel.value;
+          const tid = sel.dataset.badge;
+          let paid = 0;
+          let method = '';
+          if (st === '부분수금') {
+            const amt = prompt('받은금액', '0');
+            if (amt == null) { renderSettle('unpaid'); return; }
+            paid = Number(amt || 0);
+            method = prompt('수단 (카드/계좌/현금)', '현금') || '현금';
+          } else if (st.indexOf('완납') >= 0) {
+            const row = rows.find((x) => x.ticket_id === tid);
+            paid = Number((row && row.total) || 0);
+            method = st.replace('완납', '');
+          }
+          try {
+            await api('/hq/tickets/' + tid + '/finance', {
+              method: 'POST',
+              body: JSON.stringify({ settlement_status: st, settlement_paid: paid, settlement_method: method })
+            });
+            bustDashClient();
+            toast('정산 갱신: ' + st);
+            renderSettle('unpaid');
+          } catch (e) { toast(e.message, true); }
+        };
+      });
+    } else if (t === 'collected') {
+      body.innerHTML = `<div class="actions" style="margin-bottom:10px">
+        <button class="btn btn-sm${period === 'today' ? ' btn-primary' : ''}" type="button" data-p="today">오늘</button>
+        <button class="btn btn-sm${period === 'week' ? ' btn-primary' : ''}" type="button" data-p="week">이번주</button>
+        <button class="btn btn-sm${period === 'month' ? ' btn-primary' : ''}" type="button" data-p="month">이번달</button>
+      </div><div id="colBody"></div>`;
+      body.querySelectorAll('[data-p]').forEach((b) => b.onclick = () => renderSettle('collected', { period: b.dataset.p }));
+      const data = await api('/hq/settlements?tab=collected&period=' + encodeURIComponent(period));
+      const rows = data.rows || [];
+      const col = document.getElementById('colBody');
+      col.innerHTML = (rows.length
+        ? '<table><thead><tr><th>출장일</th><th>티켓</th><th>고객</th><th>출장비</th><th>수리</th><th>수금상태</th><th>수금액</th></tr></thead><tbody>' +
+          rows.map((r) => '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono">' +
+            esc((r.completed_at || r.scheduled_at || '').slice(0, 10)) + '</td><td class="mono">' +
+            esc(r.number || r.ticket_id) + '</td><td>' + esc(r.customer_name || '') + '</td><td>' +
+            moneyFmt(r.travel_fee) + '</td><td>' + moneyFmt(r.repair_total) + '</td><td><span class="badge">' +
+            esc(r.settlement_status) + '</span></td><td>' + moneyFmt(r.settlement_paid) + '</td></tr>').join('') +
+          '</tbody></table>'
+        : '<div class="empty">해당 기간 수금 없음</div>') +
+        '<div class="card" style="margin-top:10px"><b>합계</b> 출장비 ' + moneyFmt(data.sum_travel) +
+        ' · 수리 ' + moneyFmt(data.sum_repair) + ' · 수금 ' + moneyFmt(data.sum_paid) + '</div>';
+      col.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => openTicket(b.dataset.open));
+    } else if (t === 'expenses') {
+      await loadStaff();
+      const nameOf = (uid) => {
+        const u = (staff || []).find((x) => x.user_id === uid);
+        return u ? u.name : (uid || '-');
+      };
+      body.innerHTML = `<div class="actions" style="margin-bottom:10px">
+        <button class="btn btn-sm${expFilter === 'pending' ? ' btn-primary' : ''}" type="button" data-ef="pending">대기</button>
+        <button class="btn btn-sm${expFilter === 'approved' ? ' btn-primary' : ''}" type="button" data-ef="approved">승인</button>
+        <button class="btn btn-sm${expFilter === 'rejected' ? ' btn-primary' : ''}" type="button" data-ef="rejected">반려</button>
+        ${money ? '<button class="btn btn-primary btn-sm" type="button" id="sExp">＋ 경비</button>' : ''}
+      </div><div id="expBody"></div>`;
+      body.querySelectorAll('[data-ef]').forEach((b) => b.onclick = () => renderSettle('expenses', { expFilter: b.dataset.ef }));
+      if (money) {
+        document.getElementById('sExp').onclick = () => {
+          showModal(`<h3>경비 대행 입력</h3>
+            <label>직원</label><select id="eu">${staffOptions()}</select>
+            <label style="margin-top:8px">금액</label><input id="ea" type="number" />
+            <label style="margin-top:8px">항목</label>
+            <select id="ec">${EXP_CATS.map((c) => '<option value="' + c + '">' + c + '</option>').join('')}</select>
+            <label style="margin-top:8px">메모</label><input id="em" />
+            <label style="margin-top:8px">영수증 메모</label><input id="er" placeholder="영수증 있으면 메모" />
+            <div class="actions"><button class="btn" type="button" id="ex">취소</button>
+            <button class="btn btn-primary" type="button" id="es">저장</button></div>`);
+          document.getElementById('ex').onclick = closeModal;
+          document.getElementById('es').onclick = async () => {
+            try {
+              await api('/hq/expenses', { method: 'POST', body: JSON.stringify({
+                user_id: document.getElementById('eu').value,
+                amount: Number(document.getElementById('ea').value || 0),
+                category: document.getElementById('ec').value,
+                memo: document.getElementById('em').value,
+                receipt_note: document.getElementById('er').value
+              })});
+              bustDashClient();
+              toast('경비 입력'); closeModal(); renderSettle('expenses', { expFilter: 'pending' });
+            } catch (e) { toast(e.message, true); }
+          };
+        };
+      }
+      const rows = (await api('/hq/expenses')).filter((e) => e.status === expFilter);
+      const expBody = document.getElementById('expBody');
+      expBody.innerHTML = rows.length
+        ? '<table><thead><tr><th>직원</th><th>금액</th><th>항목</th><th>메모</th><th>영수증</th><th></th></tr></thead><tbody>' +
+          rows.map((e) => '<tr><td>' + esc(nameOf(e.user_id)) + '</td><td>' + moneyFmt(e.amount) +
+            '</td><td>' + esc(e.category) + '</td><td>' + esc(e.memo || '') +
+            '</td><td>' + (e.receipt_note ? '<button class="btn btn-sm" type="button" data-rc="' + esc(e.receipt_note) + '">보기</button>' : '-') +
+            '</td><td>' + (e.status === 'pending' && money
+              ? '<button class="btn btn-sm btn-primary" type="button" data-ap="' + esc(e.expense_id) + '">승인</button> ' +
+                '<button class="btn btn-sm btn-danger" type="button" data-rj="' + esc(e.expense_id) + '">반려</button>'
+              : '<span class="badge">' + esc(e.status) + '</span>') +
+            '</td></tr>').join('') + '</tbody></table>'
+        : '<div class="empty">해당 상태 경비 없음</div>';
+      expBody.querySelectorAll('[data-rc]').forEach((b) => b.onclick = () => alert(b.dataset.rc));
+      expBody.querySelectorAll('[data-ap]').forEach((b) => b.onclick = async () => {
+        await api('/hq/expenses/' + b.dataset.ap + '/decide', { method: 'POST', body: JSON.stringify({ status: 'approved' }) });
+        bustDashClient(); toast('승인'); renderSettle('expenses', { expFilter: 'pending' });
+      });
+      expBody.querySelectorAll('[data-rj]').forEach((b) => b.onclick = async () => {
+        await api('/hq/expenses/' + b.dataset.rj + '/decide', { method: 'POST', body: JSON.stringify({ status: 'rejected' }) });
+        bustDashClient(); toast('반려'); renderSettle('expenses', { expFilter: 'pending' });
+      });
+    } else if (t === 'opex') {
+      body.innerHTML = `<div class="row" style="margin-bottom:10px">
+        <div><label>월</label><input id="oxYm" type="month" value="${esc(opexYm)}" /></div>
+        <button class="btn btn-primary btn-sm" type="button" id="oxAdd">＋ 입력</button>
+      </div><div id="oxBody"></div>`;
+      document.getElementById('oxYm').onchange = () => renderSettle('opex', { opexYm: document.getElementById('oxYm').value });
+      document.getElementById('oxAdd').onclick = () => {
+        const ym = document.getElementById('oxYm').value || opexYm;
+        showModal(`<h3>운영비 입력</h3>
+          <label>월</label><input id="om" type="month" value="${esc(ym)}" />
+          <label style="margin-top:8px">항목</label>
+          <select id="oc">${OPEX_CATS.map((c) => '<option value="' + c + '">' + c + '</option>').join('')}</select>
+          <label style="margin-top:8px">금액</label><input id="oa" type="number" />
+          <label style="margin-top:8px">메모</label><input id="onote" placeholder="잘못이면 0원 정정 메모" />
+          <div class="actions"><button class="btn" type="button" id="ox">취소</button>
+          <button class="btn btn-primary" type="button" id="os">저장</button></div>`);
+        document.getElementById('ox').onclick = closeModal;
+        document.getElementById('os').onclick = async () => {
+          try {
+            await api('/hq/opex', { method: 'POST', body: JSON.stringify({
+              year_month: document.getElementById('om').value,
+              category: document.getElementById('oc').value,
+              amount: Number(document.getElementById('oa').value || 0),
+              memo: document.getElementById('onote').value
+            })});
+            bustDashClient();
+            toast('운영비 저장'); closeModal();
+            renderSettle('opex', { opexYm: document.getElementById('om').value });
+          } catch (e) { toast(e.message, true); }
+        };
+      };
+      const all = await api('/hq/opex');
+      const rows = (all || []).filter((o) => o.year_month === opexYm);
+      const sum = rows.reduce((a, o) => a + Number(o.amount || 0), 0);
+      document.getElementById('oxBody').innerHTML = rows.length
+        ? '<table><thead><tr><th>항목</th><th>금액</th><th>메모</th><th>입력시각</th></tr></thead><tbody>' +
+          rows.map((o) => '<tr><td>' + esc(o.category) + '</td><td>' + moneyFmt(o.amount) +
+            '</td><td>' + esc(o.memo || '') + '</td><td class="mono">' + esc((o.created_at || '').slice(0, 16)) +
+            '</td></tr>').join('') + '</tbody></table><div class="muted" style="margin-top:8px">합계 ' +
+          moneyFmt(sum) + ' · 삭제는 없고 금액 0 정정 메모로 수정</div>'
+        : '<div class="empty">이번 달 운영비 없음</div>';
     }
   }
 
   async function renderReports(kind) {
     const el = document.getElementById('p-reports');
+    const k0 = kind || 'daily';
     el.innerHTML = `<div class="card"><div class="actions">
-      <button class="btn btn-sm" type="button" data-k="daily">일</button>
-      <button class="btn btn-sm" type="button" data-k="weekly">주</button>
-      <button class="btn btn-sm" type="button" data-k="monthly">월</button>
-      <a class="btn btn-primary btn-sm" id="rDl" download="report.csv">CSV 다운로드</a></div>
-      <pre id="rOut" class="mono" style="margin-top:12px;white-space:pre-wrap;font-size:12px"></pre></div>`;
-    const load = async (k) => {
-      const d = await api('/hq/reports?kind=' + encodeURIComponent(k));
-      document.getElementById('rOut').textContent = d.csv || '';
-      const blob = new Blob([d.csv || ''], { type: 'text/csv;charset=utf-8' });
-      document.getElementById('rDl').href = URL.createObjectURL(blob);
-      document.getElementById('rDl').download = 'report-' + k + '.csv';
+      <button class="btn btn-sm${k0 === 'daily' ? ' btn-primary' : ''}" type="button" data-k="daily">일</button>
+      <button class="btn btn-sm${k0 === 'weekly' ? ' btn-primary' : ''}" type="button" data-k="weekly">주</button>
+      <button class="btn btn-sm${k0 === 'monthly' ? ' btn-primary' : ''}" type="button" data-k="monthly">월</button>
+      <a class="btn btn-primary btn-sm" id="rDl" download="report.csv">엑셀 내보내기</a></div>
+      <div id="rTable" style="margin-top:12px"></div></div>`;
+    const paint = async (k) => {
+      el.querySelectorAll('[data-k]').forEach((b) => b.classList.toggle('btn-primary', b.dataset.k === k));
+      const d = await api('/hq/reports?period=' + encodeURIComponent(k));
+      const s = d.summary || {};
+      let rows = [];
+      if (k === 'daily' || k === 'day') {
+        rows = [
+          ['오늘 콜', s.today_calls],
+          ['오늘 출장', s.today_tickets],
+          ['완료', s.today_done],
+          ['미처리', s.open],
+          ['당일수금', s.today_paid],
+          ['당일경비', s.today_expense]
+        ];
+      } else if (k === 'weekly' || k === 'week') {
+        rows = [
+          ['출장·티켓 수', s.tickets],
+          ['미처리', s.open],
+          ['출장비합', s.travel_sum],
+          ['미수', s.unpaid]
+        ];
+      } else {
+        rows = [
+          ['AS건수', s.as_count],
+          ['재고장', s.repeats],
+          ['수금합', s.paid_sum],
+          ['출장+운영+경비', s.ops_sum],
+          ['급여총액', s.payroll_total],
+          ['미수잔', s.unpaid]
+        ];
+      }
+      document.getElementById('rTable').innerHTML =
+        '<table><thead><tr><th>지표</th><th>값</th></tr></thead><tbody>' +
+        rows.map(([l, v]) => '<tr><td>' + esc(l) + '</td><td class="mono"><b>' +
+          esc(v != null ? v : 0) + '</b></td></tr>').join('') + '</tbody></table>';
+      const csv = d.csv || ('지표,값\n' + rows.map(([l, v]) => l + ',' + (v != null ? v : 0)).join('\n') + '\n');
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.getElementById('rDl');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'report-' + k + '.csv';
     };
-    el.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => load(b.dataset.k));
-    await load(kind || 'daily');
+    el.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => paint(b.dataset.k));
+    await paint(k0);
   }
 
   async function renderFollowup() {
