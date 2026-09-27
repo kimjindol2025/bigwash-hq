@@ -1,0 +1,806 @@
+;; bigwash HQ 1차 — AFJ + AFL-DB
+;; 본사 PC SaaS: CRM + AS + Workforce
+
+(define PORT (str-to-num (?? (shell_env "PORT") "3000")))
+(define ROOT (?? (shell_env "BIGWASH_AS_ROOT") "/home/kim/kim/projects/bigwash-as"))
+(define JWT_SECRET (?? (shell_env "JWT_SECRET") "bigwash-hq-secret-2026"))
+(define JWT_TTL (str-to-num (?? (shell_env "JWT_TTL_SEC") "86400")))
+(define COMPANY_ID (?? (shell_env "HQ_COMPANY_ID") "company-hq-001"))
+(define UPLOAD_DIR (str ROOT "/uploads/hq-photos"))
+
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+;; 확장 핸들러는 라우트 등록 직전에 load (require-user 등 정의 후)
+
+(defn json-ok [$b] (server-json 200 $b))
+(defn json-created [$b] (server-json 201 $b))
+(defn json-err [$s $m] (server-json $s {"error" $m}))
+(defn req-body [$req] (let [$b (get $req "body")] (if (nil? $b) {} $b)))
+(defn iso-now [] (now-iso))
+(defn new-id [$p] (str $p "-" (uuid_v4)))
+
+(defn bearer-token [$req]
+  (let [$hdr (?? (server-req-header $req "authorization") "")]
+    (if (str-starts-with $hdr "Bearer ") (slice $hdr 7) "")))
+
+(defn require-user [$req]
+  (let [$token (bearer-token $req)]
+    (if (= $token "")
+      {"ok" false "status" 401 "error" "Unauthorized"}
+      (try
+        (let [$p (auth-jwt-verify $token JWT_SECRET)]
+          (if (nil? $p)
+            {"ok" false "status" 401 "error" "Invalid token"}
+            {"ok" true "user" $p "company_id" (?? (get $p "company_id") COMPANY_ID)}))
+        (catch $e {"ok" false "status" 401 "error" "Invalid token"})))))
+
+(defn cid [$gate] (get $gate "company_id"))
+(defn uid [$gate] (get (get $gate "user") "user_id"))
+
+(defn ensure-upload! []
+  (try
+    (do
+      (if (not (file-exists (str ROOT "/uploads"))) (file-mkdir (str ROOT "/uploads")))
+      (if (not (file-exists UPLOAD_DIR)) (file-mkdir UPLOAD_DIR))
+      true)
+    (catch $e false)))
+
+(defn valid-phone? [$p]
+  (and (string? $p) (>= (length $p) 9) (<= (length $p) 20)))
+
+(defn ticket-number []
+  (let [$d (slice (iso-now) 0 10)
+        $day (str-replace $d "-" "")]
+    (str "AS-" $day "-" (slice (uuid_v4) 0 3))))
+
+(defn add-event! [$company $ticket $actor $type $from $to $memo]
+  (db-insert "hq_ticket_events"
+             {"event_id" (new-id "evt")
+              "company_id" $company
+              "ticket_id" $ticket
+              "actor_id" (?? $actor "")
+              "type" $type
+              "from_status" (?? $from "")
+              "to_status" (?? $to "")
+              "memo" (?? $memo "")
+              "at" (iso-now)}))
+
+(defn can-transition? [$from $to $has-assignee $cancel-reason]
+  (cond
+    [(and (= $to "cancelled") (not (= $cancel-reason ""))) true]
+    [(and (= $from "received") (= $to "assigned") $has-assignee) true]
+    [(and (= $from "received") (= $to "waiting_assign") (not $has-assignee)) true]
+    [(and (= $from "waiting_assign") (= $to "assigned") $has-assignee) true]
+    [(and (= $from "assigned") (or (= $to "en_route") (= $to "hold") (= $to "cancelled"))) true]
+    [(and (= $from "en_route") (or (= $to "repairing") (= $to "parts_wait") (= $to "done"))) true]
+    [(and (= $from "repairing") (or (= $to "parts_wait") (= $to "done"))) true]
+    [(and (= $from "parts_wait") (or (= $to "repairing") (= $to "done"))) true]
+    [(and (= $from "done") (= $to "followup")) true]
+    [(and (= $from "followup") (or (= $to "closed") (= $to "reopen"))) true]
+    [(and (= $from "closed") (= $to "reopen")) true]
+    [(and (= $from "reopen") (or (= $to "waiting_assign") (= $to "assigned"))) true]
+    [(and (= $from "hold") (or (= $to "assigned") (= $to "waiting_assign") (= $to "cancelled"))) true]
+    [true false]))
+
+(defn serve-hq [$rel]
+  (let [$path (str ROOT "/public/hq/" $rel)]
+    (if (file-exists $path)
+      (server-html (file-read $path))
+      (json-err 404 "Not found"))))
+
+(defn handle-health [$req]
+  (json-ok {"status" "ok" "service" "bigwash-hq" "db_ready" (db-ready?) "ts" (iso-now)}))
+
+(defn handle-login [$req]
+  (let [$body (req-body $req)
+        $login (?? (get $body "login") "")
+        $password (?? (get $body "password") "")]
+    (if (or (= $login "") (= $password ""))
+      (json-err 400 "login and password required")
+      (let [$q (db-query "hq_users" {"login" $login})
+            $rows (db-rows $q)]
+        (if (= (length $rows) 0)
+          (json-err 401 "Invalid login")
+          (let [$u (get $rows 0)]
+            (if (not (auth-verify-password $password (get $u "password_hash")))
+              (json-err 401 "Invalid password")
+              (if (not (= (get $u "employment_status") "active"))
+                (json-err 403 "User not active")
+                (let [$token (auth-jwt-sign
+                               {"user_id" (get $u "user_id")
+                                "login" $login
+                                "name" (get $u "name")
+                                "role" (get $u "role")
+                                "company_id" (get $u "company_id")}
+                               JWT_SECRET
+                               JWT_TTL)]
+                  (json-ok {"token" $token
+                            "user" {"user_id" (get $u "user_id")
+                                    "name" (get $u "name")
+                                    "role" (get $u "role")
+                                    "company_id" (get $u "company_id")}}))))))))))
+
+(defn handle-users-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$rows (db-rows (db-query "hq_users" {"company_id" (cid $gate)}))
+            $only (?? (server-req-query $req "assignable") "")]
+        (if (= $only "1")
+          (json-ok (filter (fn [$u] (= (get $u "employment_status") "active")) $rows))
+          (json-ok $rows))))))
+
+(defn handle-user-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$role (?? (get (get $gate "user") "role") "")]
+        (if (not (= $role "admin"))
+          (json-err 403 "admin only")
+          (let [$body (req-body $req)
+                $login (?? (get $body "login") "")
+                $name (?? (get $body "name") "")
+                $password (?? (get $body "password") "tech123")
+                $urole (?? (get $body "role") "technician")]
+            (if (or (= $login "") (= $name ""))
+              (json-err 400 "login and name required")
+              (let [$dup (db-rows (db-query "hq_users" {"login" $login}))]
+                (if (> (length $dup) 0)
+                  (json-err 409 "login exists")
+                  (let [$id (new-id "user")
+                        $now (iso-now)
+                        $row {"user_id" $id
+                              "company_id" (cid $gate)
+                              "login" $login
+                              "password_hash" (auth-hash-password $password)
+                              "name" $name
+                              "phone" (?? (get $body "phone") "")
+                              "email" (?? (get $body "email") "")
+                              "role" $urole
+                              "org_id" (?? (get $body "org_id") "org-hq")
+                              "employment_status" "active"
+                              "hired_on" (?? (get $body "hired_on") "")
+                              "regions" (?? (get $body "regions") "")
+                              "skills" (?? (get $body "skills") "")
+                              "daily_cap" (?? (get $body "daily_cap") 0)
+                              "note" (?? (get $body "note") "")
+                              "created_at" $now
+                              "updated_at" $now}]
+                    (if (not (get (db-insert "hq_users" $row) "ok"))
+                      (json-err 500 "user create failed")
+                      (json-created {"user_id" $id "login" $login "name" $name "role" $urole
+                                     "employment_status" "active"}))))))))))))
+
+(defn handle-user-patch [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $status (?? (get $body "employment_status") "")
+            $q (db-get-row "hq_users" $id)
+            $u (db-row $q)]
+        (if (or (nil? $u) (not (= (get $u "company_id") (cid $gate))))
+          (json-err 404 "User not found")
+          (if (= $status "")
+            (json-err 400 "employment_status required")
+            (do
+              (db-patch "hq_users" $id {"employment_status" $status "updated_at" (iso-now)})
+              (json-ok {"user_id" $id "employment_status" $status}))))))))
+
+(defn handle-customers-search [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$phone (?? (server-req-query $req "phone") "")
+            $company (cid $gate)]
+        (if (= $phone "")
+          (json-ok (db-rows (db-query "hq_customers" {"company_id" $company})))
+          (let [$direct (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $phone}))
+                $hist (db-rows (db-query "hq_phone_history" {"company_id" $company "phone" $phone}))]
+            (if (> (length $direct) 0)
+              (json-ok $direct)
+              (if (= (length $hist) 0)
+                (json-ok [])
+                (let [$cid0 (get (get $hist 0) "customer_id")
+                      $c (db-row (db-get-row "hq_customers" $cid0))]
+                  (json-ok (if (nil? $c) [] [$c])))))))))))
+
+(defn handle-customer-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $company (cid $gate)
+            $phone (?? (get $body "primary_phone") "")
+            $name (?? (get $body "display_name") "")
+            $type (?? (get $body "type") "shop")]
+        (if (or (= $name "") (not (valid-phone? $phone)))
+          (json-err 400 "display_name and primary_phone required")
+          (let [$dup (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $phone}))]
+            (if (> (length $dup) 0)
+              (json-err 409 "primary_phone already exists")
+              (let [$id (new-id "cust")
+                    $now (iso-now)
+                    $row {"customer_id" $id
+                          "company_id" $company
+                          "type" $type
+                          "display_name" $name
+                          "legal_name" (?? (get $body "legal_name") "")
+                          "primary_phone" $phone
+                          "extra_phone" (?? (get $body "extra_phone") "")
+                          "contact_name" (?? (get $body "contact_name") "")
+                          "contact_phone" (?? (get $body "contact_phone") "")
+                          "address" (?? (get $body "address") "")
+                          "visit_note" (?? (get $body "visit_note") "")
+                          "status" "active"
+                          "account_owner_user_id" (?? (get $body "account_owner_user_id") "")
+                          "tags" (?? (get $body "tags") "")
+                          "hours_note" (?? (get $body "hours_note") "")
+                          "created_at" $now
+                          "updated_at" $now}
+                    $ins (db-insert "hq_customers" $row)]
+                (if (not (get $ins "ok"))
+                  (json-err 500 (?? (get $ins "message") "customer create failed"))
+                  (do
+                    (db-insert "hq_phone_history"
+                               {"history_id" (new-id "ph")
+                                "company_id" $company
+                                "customer_id" $id
+                                "phone" $phone
+                                "kind" "primary"
+                                "changed_at" $now})
+                    (json-created $row)))))))))))
+
+(defn handle-customer-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $c (db-row (db-get-row "hq_customers" $id))]
+        (if (or (nil? $c) (not (= (get $c "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (json-ok $c))))))
+
+(defn handle-equipment-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$cust (?? (server-req-query $req "customer_id") "")
+            $company (cid $gate)
+            $rows (if (= $cust "")
+                    (db-rows (db-query "hq_equipment" {"company_id" $company}))
+                    (db-rows (db-query "hq_equipment" {"company_id" $company "customer_id" $cust})))]
+        (json-ok $rows)))))
+
+(defn handle-equipment-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $cust (?? (get $body "customer_id") "")
+            $name (?? (get $body "name") "")
+            $c (db-row (db-get-row "hq_customers" $cust))]
+        (if (or (= $cust "") (= $name "") (nil? $c) (not (= (get $c "company_id") (cid $gate))))
+          (json-err 400 "customer_id and name required")
+          (let [$id (new-id "eq")
+                $now (iso-now)
+                $row {"equipment_id" $id
+                      "company_id" (cid $gate)
+                      "customer_id" $cust
+                      "name" $name
+                      "model" (?? (get $body "model") "")
+                      "serial" (?? (get $body "serial") "")
+                      "installed_on" (?? (get $body "installed_on") "")
+                      "warranty_until" (?? (get $body "warranty_until") "")
+                      "location_note" (?? (get $body "location_note") "")
+                      "status" "active"
+                      "created_at" $now
+                      "updated_at" $now}]
+            (if (not (get (db-insert "hq_equipment" $row) "ok"))
+              (json-err 500 "equipment create failed")
+              (json-created $row))))))))
+
+(define SLA_URGENT_MS 7200000)
+(define SLA_NORMAL_MS 86400000)
+(define REPEAT_MS 2592000000)
+
+(defn meta-get [$ticket-id]
+  (db-row (db-get-row "hq_ticket_meta" $ticket-id)))
+
+(defn meta-set-created! [$company $ticket-id]
+  (db-insert "hq_ticket_meta"
+             {"ticket_id" $ticket-id
+              "company_id" $company
+              "created_ms" (now-ms)
+              "completed_ms" 0}))
+
+(defn meta-set-completed! [$ticket-id]
+  (let [$m (meta-get $ticket-id)]
+    (if (nil? $m)
+      (db-insert "hq_ticket_meta"
+                 {"ticket_id" $ticket-id
+                  "company_id" COMPANY_ID
+                  "created_ms" (now-ms)
+                  "completed_ms" (now-ms)})
+      (db-patch "hq_ticket_meta" $ticket-id {"completed_ms" (now-ms)}))))
+
+(defn detect-repeat? [$company $equipment-id]
+  (let [$rows (db-rows (db-query "hq_tickets" {"company_id" $company "equipment_id" $equipment-id}))
+        $now (now-ms)
+        $hits (filter (fn [$t]
+                        (let [$st (get $t "status")
+                              $m (meta-get (get $t "ticket_id"))
+                              $done-ms (if (nil? $m) 0 (?? (get $m "completed_ms") 0))
+                              $closed (or (= $st "closed") (= $st "done") (= $st "followup"))]
+                          (and $closed (> $done-ms 0) (<= (- $now $done-ms) REPEAT_MS))))
+                      $rows)]
+    (> (length $hits) 0)))
+
+(defn ticket-delayed? [$t]
+  (let [$st (get $t "status")
+        $open (and (not (= $st "closed")) (not (= $st "cancelled")))
+        $unassigned (or (= $st "waiting_assign") (= (?? (get $t "assignee_id") "") ""))
+        $m (meta-get (get $t "ticket_id"))
+        $created (if (nil? $m) 0 (?? (get $m "created_ms") 0))
+        $now (now-ms)
+        $urg (?? (get $t "urgency") "normal")
+        $limit (if (= $urg "urgent") SLA_URGENT_MS SLA_NORMAL_MS)
+        $sched (?? (get $t "scheduled_at") "")
+        $today (slice (iso-now) 0 10)
+        $past-visit (and (not (= $sched ""))
+                         (< $sched $today)
+                         $open
+                         (not (= $st "done"))
+                         (not (= $st "followup")))]
+    (or $past-visit
+        (and $open $unassigned (> $created 0) (> (- $now $created) $limit)))))
+
+(defn handle-ticket-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $company (cid $gate)
+            $cust (?? (get $body "customer_id") "")
+            $eq (?? (get $body "equipment_id") "")
+            $symptom (?? (get $body "symptom") "")
+            $assignee (?? (get $body "assignee_id") "")
+            $c (db-row (db-get-row "hq_customers" $cust))
+            $e (db-row (db-get-row "hq_equipment" $eq))]
+        (if (or (nil? $c) (nil? $e) (= $symptom "") (not (= (get $c "company_id") $company)))
+          (json-err 400 "customer_id, equipment_id, symptom required")
+          (if (not (= (get $e "customer_id") $cust))
+            (json-err 400 "equipment does not belong to customer")
+            (let [$assignee-ok (if (= $assignee "")
+                                 true
+                                 (let [$u (db-row (db-get-row "hq_users" $assignee))]
+                                   (and (not (nil? $u))
+                                        (= (get $u "company_id") $company)
+                                        (= (get $u "employment_status") "active"))))]
+              (if (not $assignee-ok)
+                (json-err 400 "assignee not assignable")
+                (let [$status (if (= $assignee "") "waiting_assign" "assigned")
+                      $id (new-id "tkt")
+                      $num (ticket-number)
+                      $now (iso-now)
+                      $repeat (if (detect-repeat? $company $eq) "true" "false")
+                      $row {"ticket_id" $id
+                            "company_id" $company
+                            "number" $num
+                            "customer_id" $cust
+                            "equipment_id" $eq
+                            "symptom" $symptom
+                            "fault_type" (?? (get $body "fault_type") "")
+                            "urgency" (?? (get $body "urgency") "normal")
+                            "status" $status
+                            "assignee_id" $assignee
+                            "scheduled_at" (?? (get $body "scheduled_at") "")
+                            "work_note" ""
+                            "bill_type" (?? (get $body "bill_type") "unknown")
+                            "bill_amount" (?? (get $body "bill_amount") 0)
+                            "followup_status" ""
+                            "occurred_at" (?? (get $body "occurred_at") "")
+                            "preferred_at" (?? (get $body "preferred_at") "")
+                            "intake_phone" (?? (get $body "intake_phone") (get $c "primary_phone"))
+                            "intake_memo" (?? (get $body "intake_memo") "")
+                            "cancel_reason" ""
+                            "photo_incomplete" "true"
+                            "is_repeat" $repeat
+                            "created_at" $now
+                            "updated_at" $now
+                            "completed_at" ""}]
+                  (if (not (get (db-insert "hq_tickets" $row) "ok"))
+                    (json-err 500 "ticket create failed")
+                    (do
+                      (meta-set-created! $company $id)
+                      (finance-upsert! $company $id
+                                       {"ticket_type" (?? (get $body "ticket_type") "dispatch")
+                                        "region_id" (?? (get $body "region_id") "")
+                                        "travel_fee" (if (= (?? (get $body "region_id") "") "")
+                                                       0
+                                                       (region-fee (get $body "region_id")))
+                                        "settlement_status" ""})
+                      (add-event! $company $id (uid $gate) "created" "" $status "접수")
+                      (if (not (= $assignee ""))
+                        (add-event! $company $id (uid $gate) "assign" "" $status (str "지정:" $assignee)))
+                      (json-created $row))))))))))))
+
+(defn handle-tickets-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$company (cid $gate)
+            $status (?? (server-req-query $req "status") "")
+            $assignee (?? (server-req-query $req "assignee_id") "")
+            $where (if (not (= $status ""))
+                     {"company_id" $company "status" $status}
+                     (if (not (= $assignee ""))
+                       {"company_id" $company "assignee_id" $assignee}
+                       {"company_id" $company}))
+            $rows (db-rows (db-query "hq_tickets" $where))]
+        (json-ok (reverse (sort-by (fn [$r] (get $r "created_at")) $rows)))))))
+
+(defn handle-ticket-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $t (db-row (db-get-row "hq_tickets" $id))]
+        (if (or (nil? $t) (not (= (get $t "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (let [$events (db-rows (db-query "hq_ticket_events" {"ticket_id" $id}))
+                $photos (db-rows (db-query "hq_photos" {"ticket_id" $id}))]
+            (json-ok {"ticket" $t
+                      "events" (reverse (sort-by (fn [$e] (get $e "at")) $events))
+                      "photos" $photos})))))))
+
+(defn handle-ticket-assign [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $assignee (?? (get $body "assignee_id") "")
+            $t (db-row (db-get-row "hq_tickets" $id))
+            $u (db-row (db-get-row "hq_users" $assignee))]
+        (if (or (nil? $t) (not (= (get $t "company_id") (cid $gate))))
+          (json-err 404 "Ticket not found")
+          (if (or (nil? $u) (not (= (get $u "employment_status") "active")))
+            (json-err 400 "assignee not assignable")
+            (let [$from (get $t "status")
+                  $to (if (or (= $from "waiting_assign") (= $from "received") (= $from "reopen") (= $from "hold"))
+                        "assigned" $from)]
+              (do
+                (db-patch "hq_tickets" $id
+                          {"assignee_id" $assignee
+                           "status" $to
+                           "updated_at" (iso-now)})
+                (add-event! (cid $gate) $id (uid $gate) "assign" $from $to
+                            (str "주담당→" (get $u "name")))
+                (json-ok {"ticket_id" $id "assignee_id" $assignee "status" $to})))))))))
+
+(defn handle-ticket-schedule [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $at (?? (get (req-body $req) "scheduled_at") "")
+            $t (db-row (db-get-row "hq_tickets" $id))]
+        (if (or (nil? $t) (= $at ""))
+          (json-err 400 "scheduled_at required")
+          (let [$aid (?? (get $t "assignee_id") "")
+                $others (if (= $aid "")
+                          []
+                          (filter (fn [$o]
+                                    (and (not (= (get $o "ticket_id") $id))
+                                         (= (?? (get $o "assignee_id") "") $aid)
+                                         (= (?? (get $o "scheduled_at") "") $at)))
+                                  (db-rows (db-query "hq_tickets" {"company_id" (cid $gate)}))))
+                $warn (> (length $others) 0)]
+            (do
+              (db-patch "hq_tickets" $id {"scheduled_at" $at "updated_at" (iso-now)})
+              (add-event! (cid $gate) $id (uid $gate) "schedule" (get $t "status") (get $t "status") $at)
+              (json-ok {"ticket_id" $id
+                        "scheduled_at" $at
+                        "conflict_warning" $warn}))))))))
+
+(defn count-photos [$ticket-id $side]
+  (length (filter (fn [$p] (= (get $p "side") $side))
+                  (db-rows (db-query "hq_photos" {"ticket_id" $ticket-id})))))
+
+(defn handle-ticket-transition [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $to (?? (get $body "to") "")
+            $memo (?? (get $body "memo") "")
+            $cancel (?? (get $body "cancel_reason") "")
+            $t (db-row (db-get-row "hq_tickets" $id))]
+        (if (nil? $t)
+          (json-err 404 "Not found")
+          (let [$from (get $t "status")
+                $has (not (= (?? (get $t "assignee_id") "") ""))]
+            (if (not (can-transition? $from $to $has $cancel))
+              (json-err 400 (str "invalid transition " $from " → " $to))
+              (let [$now (iso-now)
+                    $patch {"status" $to "updated_at" $now}
+                    $patch2 (if (= $to "cancelled")
+                              (assoc $patch "cancel_reason" $cancel)
+                              (if (or (= $to "done") (= $to "followup"))
+                                (assoc $patch "completed_at" $now)
+                                $patch))
+                    $before-n (count-photos $id "before")
+                    $after-n (count-photos $id "after")
+                    $photo-flag (if (and (= $to "done") (or (< $before-n 1) (< $after-n 1)))
+                                  "true" (?? (get $t "photo_incomplete") "true"))
+                    $patch3 (assoc $patch2 "photo_incomplete" $photo-flag)]
+                (do
+                  (db-patch "hq_tickets" $id $patch3)
+                  (if (or (= $to "done") (= $to "followup") (= $to "closed"))
+                    (meta-set-completed! $id))
+                  (add-event! (cid $gate) $id (uid $gate) "transition" $from $to $memo)
+                  (json-ok {"ticket_id" $id "status" $to "photo_incomplete" $photo-flag}))))))))))
+
+(defn handle-call-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $phone (?? (get $body "phone") "")
+            $type (?? (get $body "call_type") "other")]
+        (if (not (valid-phone? $phone))
+          (json-err 400 "phone required")
+          (let [$row {"call_id" (new-id "call")
+                      "company_id" (cid $gate)
+                      "customer_id" (?? (get $body "customer_id") "")
+                      "ticket_id" (?? (get $body "ticket_id") "")
+                      "phone" $phone
+                      "call_type" $type
+                      "memo" (?? (get $body "memo") "")
+                      "actor_id" (uid $gate)
+                      "created_at" (iso-now)}]
+            (if (not (get (db-insert "hq_call_logs" $row) "ok"))
+              (json-err 500 "call log failed")
+              (json-created $row))))))))
+
+(defn handle-photo-upload [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tid (server-req-param $req "id")
+            $body (req-body $req)
+            $side (?? (get $body "side") "")
+            $slot (?? (get $body "slot") 0)
+            $raw (?? (get $body "image_base64") "")
+            $t (db-row (db-get-row "hq_tickets" $tid))]
+        (if (or (nil? $t) (and (not (= $side "before")) (not (= $side "after"))) (< $slot 1) (> $slot 5) (= $raw ""))
+          (json-err 400 "side, slot 1-5, image_base64 required")
+          (do
+            (ensure-upload!)
+            (let [$pid (new-id "pho")
+                  $path (str UPLOAD_DIR "/" $pid ".b64")
+                  $b64 (if (str-starts-with $raw "data:")
+                         (let [$i (str-index-of $raw ",")] (if (< $i 0) $raw (slice $raw (+ $i 1))))
+                         $raw)]
+              (try
+                (do
+                  (file-write $path $b64)
+                  (db-insert "hq_photos"
+                             {"photo_id" $pid
+                              "company_id" (cid $gate)
+                              "ticket_id" $tid
+                              "side" $side
+                              "slot" $slot
+                              "file_path" $path
+                              "mime" (?? (get $body "mime") "image/jpeg")
+                              "uploader_id" (uid $gate)
+                              "uploaded_at" (iso-now)})
+                  (json-created {"photo_id" $pid "side" $side "slot" $slot}))
+                (catch $e (json-err 500 (str "upload failed: " $e)))))))))))
+
+(defn handle-dashboard [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$company (cid $gate)
+            $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
+            $calls (db-rows (db-query "hq_call_logs" {"company_id" $company}))
+            $today (slice (iso-now) 0 10)
+            $today-calls (length (filter (fn [$c] (str-starts-with (?? (get $c "created_at") "") $today)) $calls))
+            $unassigned (length (filter (fn [$t] (or (= (get $t "status") "waiting_assign")
+                                                     (= (?? (get $t "assignee_id") "") ""))) $tickets))
+            $parts (length (filter (fn [$t] (= (get $t "status") "parts_wait")) $tickets))
+            $photo (length (filter (fn [$t] (= (?? (get $t "photo_incomplete") "") "true")) $tickets))
+            $done (length (filter (fn [$t] (and (str-starts-with (?? (get $t "completed_at") "") $today)
+                                                (or (= (get $t "status") "done")
+                                                    (= (get $t "status") "followup")
+                                                    (= (get $t "status") "closed")))) $tickets))
+            $visits (length (filter (fn [$t] (str-starts-with (?? (get $t "scheduled_at") "") $today)) $tickets))
+            $repeats (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
+            $delayed (length (filter ticket-delayed? $tickets))
+            $followup (length (filter (fn [$t] (= (get $t "status") "followup")) $tickets))
+            $fins (db-rows (db-query "hq_ticket_finance" {"company_id" $company}))
+            $unpaid (length (filter (fn [$f] (or (= (get $f "settlement_status") "미수")
+                                                 (= (get $f "settlement_status") "부분수금"))) $fins))
+            $exps (db-rows (db-query "hq_expenses" {"company_id" $company}))
+            $exp-wait (length (filter (fn [$e] (= (get $e "status") "pending")) $exps))
+            $no-doc (length (filter (fn [$f] (not (= (?? (get $f "doc_ready") "") "true"))) $fins))
+            $staff-load (length (filter (fn [$t]
+                                          (and (not (= (?? (get $t "assignee_id") "") ""))
+                                               (not (= (get $t "status") "closed"))
+                                               (not (= (get $t "status") "cancelled")))) $tickets))]
+        (json-ok {"today_calls" $today-calls
+                  "today_visits" $visits
+                  "unassigned" $unassigned
+                  "delayed" $delayed
+                  "parts_wait" $parts
+                  "photo_incomplete" $photo
+                  "today_done" $done
+                  "repeats" $repeats
+                  "followup" $followup
+                  "unpaid" $unpaid
+                  "expense_pending" $exp-wait
+                  "doc_incomplete" $no-doc
+                  "staff_load" $staff-load
+                  "sla" {"urgent_ms" SLA_URGENT_MS "normal_ms" SLA_NORMAL_MS "repeat_ms" REPEAT_MS}})))))
+
+(defn handle-customer-hub [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $c (db-row (db-get-row "hq_customers" $id))]
+        (if (or (nil? $c) (not (= (get $c "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (json-ok {"customer" $c
+                    "phones" (db-rows (db-query "hq_phone_history" {"customer_id" $id}))
+                    "equipment" (db-rows (db-query "hq_equipment" {"customer_id" $id}))
+                    "tickets" (db-rows (db-query "hq_tickets" {"customer_id" $id}))
+                    "calls" (db-rows (db-query "hq_call_logs" {"customer_id" $id}))}))))))
+
+(defn handle-customer-phone [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $phone (?? (get (req-body $req) "primary_phone") "")
+            $c (db-row (db-get-row "hq_customers" $id))]
+        (if (or (nil? $c) (not (= (get $c "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (if (not (valid-phone? $phone))
+            (json-err 400 "primary_phone required")
+            (let [$old (get $c "primary_phone")
+                  $now (iso-now)]
+              (do
+                (db-patch "hq_customers" $id {"primary_phone" $phone "updated_at" $now})
+                (db-insert "hq_phone_history"
+                           {"history_id" (new-id "ph")
+                            "company_id" (cid $gate)
+                            "customer_id" $id
+                            "phone" $old
+                            "kind" "former_primary"
+                            "changed_at" $now})
+                (db-insert "hq_phone_history"
+                           {"history_id" (new-id "ph")
+                            "company_id" (cid $gate)
+                            "customer_id" $id
+                            "phone" $phone
+                            "kind" "primary"
+                            "changed_at" $now})
+                (json-ok {"customer_id" $id "primary_phone" $phone "former" $old})))))))))
+
+(defn handle-schedule [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$company (cid $gate)
+            $day (?? (server-req-query $req "date") (slice (iso-now) 0 10))
+            $all (db-rows (db-query "hq_tickets" {"company_id" $company}))
+            $rows (filter (fn [$t] (str-starts-with (?? (get $t "scheduled_at") "") $day)) $all)
+            $conflicts (reduce (fn [$acc $t]
+                                 (let [$aid (?? (get $t "assignee_id") "")
+                                       $at (?? (get $t "scheduled_at") "")
+                                       $others (filter (fn [$o]
+                                                         (and (not (= (get $o "ticket_id") (get $t "ticket_id")))
+                                                              (= (?? (get $o "assignee_id") "") $aid)
+                                                              (not (= $aid ""))
+                                                              (= (?? (get $o "scheduled_at") "") $at)))
+                                                       $rows)]
+                                   (if (> (length $others) 0)
+                                     (append $acc [{"ticket_id" (get $t "ticket_id")
+                                                    "assignee_id" $aid
+                                                    "scheduled_at" $at
+                                                    "warning" "same assignee same datetime"}])
+                                     $acc)))
+                               []
+                               $rows)]
+        (json-ok {"date" $day "tickets" $rows "conflicts" $conflicts})))))
+
+(defn handle-settings [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok {"company_id" (cid $gate)
+                "sla_urgent_hours" 2
+                "sla_normal_hours" 24
+                "followup_days" 3
+                "repeat_days" 30
+                "photo_required_on_done" false
+                "equipment_required" true
+                "counselor_can_assign" true
+                "scope" "hq_only"}))))
+
+(defn handle-followup-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tickets (db-rows (db-query "hq_tickets" {"company_id" (cid $gate)}))
+            $rows (filter (fn [$t]
+                            (or (= (get $t "status") "followup")
+                                (= (?? (get $t "photo_incomplete") "") "true")
+                                (= (?? (get $t "followup_status") "") "pending")))
+                          $tickets)]
+        (json-ok $rows)))))
+
+(defn handle-hq-login-page [$req] (serve-hq "login.html"))
+(defn handle-hq-app-page [$req] (serve-hq "app.html"))
+(defn handle-root [$req]
+  (serve-hq "login.html"))
+
+(ensure-upload!)
+(load "/home/kim/kim/projects/bigwash-as/src/hq-ext.fl")
+
+(server-get "/health" "handle-health")
+(server-get "/" "handle-root")
+(server-get "/hq" "handle-hq-login-page")
+(server-get "/hq/login.html" "handle-hq-login-page")
+(server-get "/hq/app.html" "handle-hq-app-page")
+
+(server-post "/hq/login" "handle-login")
+(server-get "/hq/dashboard" "handle-dashboard")
+(server-get "/hq/settings" "handle-settings")
+(server-get "/hq/users" "handle-users-list")
+(server-post "/hq/users" "handle-user-create")
+(server-put "/hq/users/:id" "handle-user-patch")
+(server-get "/hq/customers" "handle-customers-search")
+(server-post "/hq/customers" "handle-customer-create")
+(server-get "/hq/customers/:id" "handle-customer-get")
+(server-get "/hq/customers/:id/hub" "handle-customer-hub")
+(server-post "/hq/customers/:id/phone" "handle-customer-phone")
+(server-get "/hq/equipment" "handle-equipment-list")
+(server-post "/hq/equipment" "handle-equipment-create")
+(server-get "/hq/tickets" "handle-tickets-list")
+(server-post "/hq/tickets" "handle-ticket-create")
+(server-get "/hq/tickets/:id" "handle-ticket-get")
+(server-post "/hq/tickets/:id/assign" "handle-ticket-assign")
+(server-post "/hq/tickets/:id/schedule" "handle-ticket-schedule")
+(server-post "/hq/tickets/:id/transition" "handle-ticket-transition")
+(server-post "/hq/tickets/:id/photos" "handle-photo-upload")
+(server-post "/hq/calls" "handle-call-create")
+(server-get "/hq/schedule" "handle-schedule")
+(server-get "/hq/followups" "handle-followup-list")
+
+(server-get "/hq/regions" "handle-regions-list")
+(server-post "/hq/regions" "handle-region-upsert")
+(server-get "/hq/products" "handle-products-list")
+(server-post "/hq/products" "handle-product-create")
+(server-get "/hq/tickets/:id/finance" "handle-ticket-finance-get")
+(server-post "/hq/tickets/:id/finance" "handle-ticket-finance-set")
+(server-post "/hq/documents" "handle-doc-issue")
+(server-get "/hq/documents" "handle-docs-list")
+(server-get "/hq/documents/:id" "handle-doc-get")
+(server-get "/hq/documents/:id/download" "handle-doc-download")
+(server-get "/hq/expenses" "handle-expenses-list")
+(server-post "/hq/expenses" "handle-expense-create")
+(server-post "/hq/expenses/:id/decide" "handle-expense-decide")
+(server-get "/hq/payroll" "handle-payroll-list")
+(server-post "/hq/payroll" "handle-payroll-upsert")
+(server-get "/hq/opex" "handle-opex-list")
+(server-post "/hq/opex" "handle-opex-create")
+(server-get "/hq/unpaid" "handle-unpaid-list")
+(server-get "/hq/reports" "handle-report")
+
+(println (str "[bigwash-hq] starting :" PORT " company=" COMPANY_ID))
+(server-start PORT)

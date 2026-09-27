@@ -1,0 +1,44 @@
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+(define SCHEMA_PATH "/home/kim/kim/projects/bigwash-as/db/hq-schema-ext.v1.json")
+(define COMPANY_ID "company-hq-001")
+
+(defn provision-table [$table]
+  (let [$response (db-create-table $table)
+        $name (get $table "name")
+        $status (get $response "status")]
+    (println (str "[hq-ext] " $name " status=" $status))))
+
+(defn seed-regions! []
+  (let [$rows (db-rows (db-query "hq_regions" {"company_id" COMPANY_ID}))]
+    (if (> (length $rows) 0)
+      (println "[hq-ext] regions exist")
+      (let [$now (iso-now)
+            $items [{"id" "reg-seoul-gangnam" "metro" "서울" "detail" "강남" "name" "서울-강남" "fee" 30000}
+                    {"id" "reg-seoul-gangbuk" "metro" "서울" "detail" "강북" "name" "서울-강북" "fee" 28000}
+                    {"id" "reg-gg-south" "metro" "경기" "detail" "남부" "name" "경기-남부" "fee" 40000}
+                    {"id" "reg-incheon" "metro" "인천" "detail" "" "name" "인천" "fee" 35000}
+                    {"id" "reg-other" "metro" "그외" "detail" "" "name" "그외" "fee" 0}]]
+        (reduce (fn [$acc $it]
+                  (do
+                    (db-insert "hq_regions"
+                               {"region_id" (get $it "id")
+                                "company_id" COMPANY_ID
+                                "metro" (get $it "metro")
+                                "detail" (get $it "detail")
+                                "name" (get $it "name")
+                                "travel_fee" (get $it "fee")
+                                "status" "active"
+                                "created_at" $now
+                                "updated_at" $now})
+                    (append $acc [true])))
+                []
+                $items)
+        (println "[hq-ext] seeded regions")))))
+
+(if (or (= AFLDB_ADMIN_KEY "") (= AFLDB_WRITE_KEY ""))
+  (println "[hq-ext] ERROR keys")
+  (let [$schema (json-parse (file-read SCHEMA_PATH))]
+    (do
+      (reduce (fn [$a $t] (do (provision-table $t) (append $a [1]))) [] (get $schema "tables"))
+      (seed-regions!)
+      (println "[hq-ext] complete"))))

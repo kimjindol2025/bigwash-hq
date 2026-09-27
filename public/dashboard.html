@@ -5,239 +5,333 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>빅워시 AS - 관리자 대시보드</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --bg: #0b1220;
+      --bg-elev: #121a2b;
+      --bg-card: #162033;
+      --line: #243149;
+      --text: #e7eefc;
+      --muted: #8fa3c1;
+      --accent: #3de0c7;
+      --accent-dim: rgba(61, 224, 199, 0.15);
+      --warn: #ffb020;
+      --danger: #ff6b7a;
+      --info: #5b8cff;
+      --ok: #3ddc97;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Noto Sans KR", sans-serif;
     }
 
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f5f5f5;
-      color: #333;
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(61, 224, 199, 0.12), transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, rgba(91, 140, 255, 0.12), transparent 50%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
     }
 
     header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 20px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      background: linear-gradient(180deg, rgba(18, 26, 43, 0.95), rgba(11, 18, 32, 0.92));
+      border-bottom: 1px solid var(--line);
+      padding: 20px 24px 22px;
+      backdrop-filter: blur(8px);
     }
 
-    header h1 {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 24px;
-    }
-
-    header p {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-top: 5px;
-    }
-
-    .header-actions {
+    .header-top {
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .header-title h1 {
+      display: flex;
       align-items: center;
-      margin-top: 15px;
       gap: 10px;
+      font-size: 22px;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 0 rgba(61, 224, 199, 0.7);
+      animation: pulse 1.8s infinite;
+      display: inline-block;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(61, 224, 199, 0.55); }
+      70% { box-shadow: 0 0 0 10px rgba(61, 224, 199, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(61, 224, 199, 0); }
+    }
+
+    .header-title p {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(61, 224, 199, 0.35);
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .logout-btn {
+      flex-shrink: 0;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+
+    .logout-btn:hover {
+      border-color: var(--danger);
+      color: var(--danger);
+      background: rgba(255, 107, 122, 0.08);
     }
 
     .stats {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
     }
 
     .stat {
-      background: rgba(255, 255, 255, 0.2);
-      padding: 12px;
-      border-radius: 5px;
-      text-align: center;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      padding: 14px 12px;
+      border-radius: 12px;
+      text-align: left;
+      min-width: 0;
+      position: relative;
+      overflow: hidden;
     }
 
-    .stat-value {
-      font-size: 24px;
-      font-weight: bold;
+    .stat::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--accent);
     }
+
+    .stat.received::before { background: var(--danger); }
+    .stat.assigned::before { background: var(--warn); }
+    .stat.progress::before { background: var(--info); }
+    .stat.done::before { background: var(--ok); }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--text);
+    }
+
+    .stat.received .stat-value { color: var(--danger); }
+    .stat.assigned .stat-value { color: var(--warn); }
+    .stat.progress .stat-value { color: #8eb6ff; }
+    .stat.done .stat-value { color: var(--ok); }
 
     .stat-label {
       font-size: 12px;
-      opacity: 0.9;
-      margin-top: 5px;
-    }
-
-    .logout-btn {
-      background: rgba(255, 255, 255, 0.3);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      padding: 8px 15px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.2s;
-    }
-
-    .logout-btn:hover {
-      background: rgba(255, 255, 255, 0.4);
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .container {
       max-width: 1200px;
       margin: 20px auto;
-      padding: 0 20px;
+      padding: 0 20px 48px;
     }
 
     .filters {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
       display: flex;
-      gap: 10px;
+      gap: 8px;
       align-items: center;
       flex-wrap: wrap;
+      box-shadow: var(--shadow);
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .filter-btn {
-      padding: 8px 15px;
-      border: 1px solid #ddd;
-      background: white;
-      border-radius: 5px;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
       cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-
-    .filter-btn.active {
-      background: #667eea;
-      color: white;
-      border-color: #667eea;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: all 0.15s ease;
     }
 
     .filter-btn:hover {
-      border-color: #667eea;
+      color: var(--text);
+      border-color: #3a4b6a;
+    }
+
+    .filter-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: rgba(61, 224, 199, 0.45);
     }
 
     .refresh-btn {
-      background: #667eea;
-      color: white;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #2bd4bd, #2a9df4);
+      color: #041018;
       border: none;
-      padding: 8px 15px;
-      border-radius: 5px;
+      padding: 8px 14px;
+      border-radius: 8px;
       cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
       margin-left: auto;
-      font-size: 14px;
     }
 
-    .refresh-btn:hover {
-      background: #764ba2;
-    }
+    .refresh-btn:hover { filter: brightness(1.08); }
 
-    .as-list {
-      display: grid;
-      gap: 15px;
-    }
+    .as-list { display: grid; gap: 12px; }
 
     .as-card {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      border-left: 4px solid #667eea;
-      transition: transform 0.2s, box-shadow 0.2s;
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      padding: 18px;
+      border-radius: 12px;
+      border-left: 3px solid var(--accent);
+      transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: var(--shadow);
     }
 
     .as-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      transform: translateY(-1px);
+      border-color: #35507a;
     }
 
-    .as-card.received {
-      border-left-color: #ff6b6b;
-    }
-
-    .as-card.assigned {
-      border-left-color: #ffa500;
-    }
-
-    .as-card.in_progress {
-      border-left-color: #4ecdc4;
-    }
-
-    .as-card.done {
-      border-left-color: #51cf66;
-    }
+    .as-card.received { border-left-color: var(--danger); }
+    .as-card.assigned { border-left-color: var(--warn); }
+    .as-card.in_progress { border-left-color: var(--info); }
+    .as-card.done { border-left-color: var(--ok); }
 
     .as-header {
       display: flex;
       justify-content: space-between;
       align-items: start;
-      margin-bottom: 15px;
+      margin-bottom: 14px;
+      gap: 12px;
     }
 
     .as-receipt {
+      font-family: var(--mono);
       font-size: 12px;
-      color: #999;
+      color: var(--muted);
       font-weight: 600;
+      letter-spacing: 0.03em;
     }
 
     .as-status {
       display: inline-block;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      color: white;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      border: 1px solid transparent;
     }
 
     .status-received {
-      background: #ff6b6b;
+      background: rgba(255, 107, 122, 0.15);
+      color: #ff8a95;
+      border-color: rgba(255, 107, 122, 0.35);
     }
-
     .status-assigned {
-      background: #ffa500;
+      background: rgba(255, 176, 32, 0.15);
+      color: #ffc357;
+      border-color: rgba(255, 176, 32, 0.35);
     }
-
     .status-in_progress {
-      background: #4ecdc4;
+      background: rgba(91, 140, 255, 0.15);
+      color: #8eb6ff;
+      border-color: rgba(91, 140, 255, 0.35);
     }
-
     .status-done {
-      background: #51cf66;
+      background: rgba(61, 220, 151, 0.15);
+      color: #63e6b0;
+      border-color: rgba(61, 220, 151, 0.35);
     }
 
-    .as-content {
-      margin-bottom: 15px;
-    }
+    .as-content { margin-bottom: 12px; }
 
     .as-customer {
       font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 5px;
+      font-weight: 700;
+      margin-bottom: 6px;
     }
 
     .as-phone {
-      font-size: 14px;
-      color: #667eea;
-      margin-bottom: 5px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 6px;
     }
 
     .as-symptom {
       font-size: 14px;
-      color: #666;
-      margin-bottom: 8px;
+      color: #c4d2ea;
+      margin-bottom: 6px;
     }
 
     .as-meta {
       display: flex;
-      gap: 20px;
-      font-size: 12px;
-      color: #999;
-      margin-bottom: 15px;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 14px;
     }
 
     .as-actions {
@@ -247,87 +341,107 @@
     }
 
     .status-btn {
-      padding: 6px 12px;
-      border: 1px solid #ddd;
-      background: white;
-      border-radius: 5px;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--text);
+      border-radius: 8px;
       cursor: pointer;
       font-size: 12px;
-      transition: all 0.2s;
+      transition: all 0.15s;
     }
 
     .status-btn:hover {
-      background: #f5f5f5;
-      border-color: #667eea;
+      border-color: #3f567a;
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .status-btn.primary {
-      background: #667eea;
-      color: white;
-      border-color: #667eea;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: rgba(61, 224, 199, 0.4);
     }
 
-    .empty {
+    .empty, .loading {
       text-align: center;
-      padding: 40px;
-      color: #999;
+      padding: 48px 20px;
+      color: var(--muted);
+      background: var(--bg-elev);
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      font-family: var(--mono);
+      font-size: 13px;
     }
 
-    .loading {
-      text-align: center;
-      padding: 40px;
-      color: #667eea;
-    }
+    .loading { color: var(--accent); }
 
     .modal {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.5);
+      inset: 0;
+      background: rgba(4, 8, 16, 0.72);
       z-index: 1000;
       justify-content: center;
       align-items: center;
+      backdrop-filter: blur(4px);
     }
 
-    .modal.show {
-      display: flex;
-    }
+    .modal.show { display: flex; }
 
     .modal-content {
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      max-width: 500px;
-      width: 90%;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      padding: 24px;
+      border-radius: 14px;
+      max-width: 460px;
+      width: 92%;
+      box-shadow: var(--shadow);
     }
 
     .modal-header {
-      font-size: 20px;
-      font-weight: 600;
-      margin-bottom: 20px;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 18px;
     }
 
-    .form-group {
-      margin-bottom: 20px;
-    }
+    .form-group { margin-bottom: 18px; }
 
     .form-group label {
       display: block;
       margin-bottom: 8px;
       font-weight: 600;
-      font-size: 14px;
+      font-size: 13px;
+      color: var(--muted);
     }
 
-    .form-group select {
+    .form-group select,
+    .form-group input[type="text"],
+    .form-group input[type="date"],
+    .form-group input[type="time"],
+    .form-group input[type="number"],
+    .form-group input[type="file"] {
       width: 100%;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
       font-size: 14px;
+      background: var(--bg-card);
+      color: var(--text);
+    }
+
+    .gallery-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: var(--bg-card);
+    }
+
+    .gallery-item img {
+      width: 100%;
+      max-height: 280px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #0a101c;
     }
 
     .modal-actions {
@@ -337,136 +451,320 @@
     }
 
     .modal-btn {
-      padding: 10px 20px;
+      padding: 10px 16px;
       border: none;
-      border-radius: 5px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 13px;
+      font-weight: 700;
     }
 
     .modal-btn-cancel {
-      background: #ddd;
-      color: #333;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
     }
 
     .modal-btn-submit {
-      background: #667eea;
-      color: white;
-    }
-
-    .modal-btn-submit:hover {
-      background: #764ba2;
+      background: linear-gradient(135deg, #2bd4bd, #2a9df4);
+      color: #041018;
     }
 
     .toast {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      padding: 15px 20px;
-      background: #667eea;
-      color: white;
-      border-radius: 5px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      padding: 12px 16px;
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid rgba(61, 224, 199, 0.35);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
       display: none;
       z-index: 2000;
+      font-size: 13px;
     }
 
     .toast.show {
       display: block;
-      animation: slideIn 0.3s ease-out;
+      animation: slideIn 0.25s ease-out;
     }
 
     @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
     }
 
     @media (max-width: 768px) {
-      .stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .as-header {
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .filters {
-        flex-direction: column;
-      }
-
-      .refresh-btn {
-        margin-left: 0;
-        width: 100%;
-      }
+      header { padding: 16px; }
+      .header-top { align-items: center; }
+      .header-title h1 { font-size: 18px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .as-header { flex-direction: column; gap: 10px; }
+      .filters { flex-direction: column; align-items: stretch; }
+      .filter-group { width: 100%; }
+      .refresh-btn { margin-left: 0; width: 100%; }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>🧼 빅워시 AS 현황</h1>
-    <p id="dateTime"></p>
-    <div class="header-actions">
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-value" id="statReceived">0</div>
-          <div class="stat-label">신규</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="statAssigned">0</div>
-          <div class="stat-label">배정</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="statProgress">0</div>
-          <div class="stat-label">진행중</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="statDone">0</div>
-          <div class="stat-label">완료</div>
-        </div>
+    <div class="header-top">
+      <div class="header-title">
+        <h1><span class="live-dot" aria-hidden="true"></span> 빅워시 AS 콘솔 <span class="badge">LIVE</span></h1>
+        <p id="dateTime"></p>
       </div>
-      <button class="logout-btn" onclick="logout()">로그아웃</button>
+      <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+        <button id="btnViewAs" class="logout-btn" type="button">AS 현황</button>
+        <button id="btnViewCrm" class="logout-btn" type="button">고객관리</button>
+        <button id="btnCustomerReg" class="logout-btn" type="button" style="border-color:rgba(61,224,199,.45);color:var(--accent);">＋ 고객 등록</button>
+        <button id="btnAsReg" class="logout-btn" type="button" style="border-color:rgba(91,140,255,.45);color:#8eb6ff;">＋ AS 접수</button>
+        <button class="logout-btn" type="button" onclick="logout()">로그아웃</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat received">
+        <div class="stat-value" id="statReceived">0</div>
+        <div class="stat-label">신규</div>
+      </div>
+      <div class="stat assigned">
+        <div class="stat-value" id="statAssigned">0</div>
+        <div class="stat-label">배정</div>
+      </div>
+      <div class="stat progress">
+        <div class="stat-value" id="statProgress">0</div>
+        <div class="stat-label">진행중</div>
+      </div>
+      <div class="stat done">
+        <div class="stat-value" id="statDone">0</div>
+        <div class="stat-label">완료</div>
+      </div>
     </div>
   </header>
 
   <div class="container">
-    <div class="filters">
-      <button class="filter-btn active" onclick="filterByStatus('all')">전체</button>
-      <button class="filter-btn" onclick="filterByStatus('received')">신규 (received)</button>
-      <button class="filter-btn" onclick="filterByStatus('assigned')">배정 (assigned)</button>
-      <button class="filter-btn" onclick="filterByStatus('in_progress')">진행중 (in_progress)</button>
-      <button class="filter-btn" onclick="filterByStatus('done')">완료 (done)</button>
-      <button class="refresh-btn" onclick="loadRequests()">🔄 새로고침</button>
-    </div>
+    <section id="panelAs">
+      <div class="filters">
+        <div class="filter-group">
+          <button class="filter-btn active" type="button" onclick="filterByStatus('all', this)">전체</button>
+          <button class="filter-btn" type="button" onclick="filterByStatus('received', this)">신규</button>
+          <button class="filter-btn" type="button" onclick="filterByStatus('assigned', this)">배정</button>
+          <button class="filter-btn" type="button" onclick="filterByStatus('in_progress', this)">진행중</button>
+          <button class="filter-btn" type="button" onclick="filterByStatus('done', this)">완료</button>
+        </div>
+        <button class="refresh-btn" type="button" onclick="loadRequests()">🔄 새로고침</button>
+      </div>
+      <div class="as-list" id="asList">
+        <div class="loading">로딩 중...</div>
+      </div>
+    </section>
 
-    <div class="as-list" id="asList">
-      <div class="loading">로딩 중...</div>
+    <section id="panelCrm" style="display:none;">
+      <div class="filters">
+        <div class="filter-group">
+          <span style="color:var(--muted);font-size:13px;align-self:center;">세차장 CRM · 고객관리</span>
+        </div>
+        <button class="refresh-btn" type="button" onclick="loadCrm()">🔄 새로고침</button>
+      </div>
+      <div class="as-list" id="crmList">
+        <div class="loading">로딩 중...</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal" id="customerModal">
+    <div class="modal-content">
+      <div class="modal-header">고객 등록 (CRM)</div>
+      <p style="color:var(--muted);font-size:12px;margin:-8px 0 16px;">세차장 단위 고객정보입니다. AS/점검은 별도 접수합니다.</p>
+      <div class="form-group">
+        <label for="custWash">세차장명 *</label>
+        <input id="custWash" type="text" placeholder="○○세차장" />
+      </div>
+      <div class="form-group">
+        <label for="custContact">담당자</label>
+        <input id="custContact" type="text" placeholder="홍길동" />
+      </div>
+      <div class="form-group">
+        <label for="custPhone">전화번호 *</label>
+        <input id="custPhone" type="tel" placeholder="010-1234-5678" autocomplete="tel" />
+      </div>
+      <div class="form-group">
+        <label for="custAddress">주소</label>
+        <input id="custAddress" type="text" placeholder="현장 주소" />
+      </div>
+      <div class="form-group">
+        <label for="custMemo">메모</label>
+        <input id="custMemo" type="text" placeholder="계약/특이사항" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" id="btnCustomerCancel">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" id="btnCustomerSave">저장</button>
+      </div>
     </div>
   </div>
 
-  <!-- 상태 변경 모달 -->
+  <div class="modal" id="asModal">
+    <div class="modal-content">
+      <div class="modal-header">AS 접수 (현장)</div>
+      <p style="color:var(--muted);font-size:12px;margin:-8px 0 16px;">세차장 장비 점검·수리 건입니다. 고객(세차장)을 먼저 선택하세요.</p>
+      <div class="form-group">
+        <label for="asCrm">세차장 *</label>
+        <select id="asCrm"></select>
+      </div>
+      <div class="form-group">
+        <label for="asEquipment">장비명 *</label>
+        <input id="asEquipment" type="text" placeholder="고압펌프 / 진공청소기 / 거품기 등" />
+      </div>
+      <div class="form-group">
+        <label for="asEquipStatus">장비 상태</label>
+        <select id="asEquipStatus">
+          <option value="">선택</option>
+          <option value="정상">정상</option>
+          <option value="이상징후">이상징후</option>
+          <option value="고장">고장</option>
+          <option value="점검필요">점검필요</option>
+          <option value="부품대기">부품대기</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="asInspection">점검·요청 내용 *</label>
+        <textarea id="asInspection" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg-card);color:var(--text);" placeholder="현장 점검 내용, 증상, 요청사항"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="asAddress">방문 주소</label>
+        <input id="asAddress" type="text" placeholder="비우면 세차장 주소 사용" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" id="btnAsCancel">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" id="btnAsSave">AS 접수</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="statusModal">
     <div class="modal-content">
       <div class="modal-header">상태 변경</div>
       <div class="form-group">
         <label for="newStatus">새로운 상태</label>
         <select id="newStatus">
-          <option value="received">신규 (received)</option>
-          <option value="assigned">배정 (assigned)</option>
-          <option value="in_progress">진행중 (in_progress)</option>
-          <option value="done">완료 (done)</option>
+          <option value="received">신규</option>
+          <option value="assigned">배정</option>
+          <option value="in_progress">진행중</option>
+          <option value="done">완료</option>
         </select>
       </div>
       <div class="modal-actions">
-        <button class="modal-btn modal-btn-cancel" onclick="closeStatusModal()">취소</button>
-        <button class="modal-btn modal-btn-submit" onclick="submitStatusChange()">변경</button>
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('statusModal')">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" onclick="submitStatusChange()">변경</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="scheduleModal">
+    <div class="modal-content">
+      <div class="modal-header">스케줄 등록</div>
+      <div class="form-group">
+        <label for="schedDate">방문일</label>
+        <input id="schedDate" type="date" />
+      </div>
+      <div class="form-group">
+        <label for="schedTime">시간</label>
+        <input id="schedTime" type="time" value="14:00" />
+      </div>
+      <div class="form-group">
+        <label for="schedTech">기사 ID</label>
+        <input id="schedTech" type="text" placeholder="tech-001" />
+      </div>
+      <div class="form-group">
+        <label for="schedAddr">방문 주소</label>
+        <input id="schedAddr" type="text" placeholder="서울시 …" />
+      </div>
+      <div class="form-group">
+        <label for="schedNotes">메모</label>
+        <input id="schedNotes" type="text" placeholder="엘리베이터 이용 가능" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('scheduleModal')">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" onclick="submitSchedule()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="photoModal">
+    <div class="modal-content">
+      <div class="modal-header" id="photoModalTitle">사진 업로드</div>
+      <div class="form-group">
+        <label for="photoFile">이미지 파일</label>
+        <input id="photoFile" type="file" accept="image/*" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('photoModal')">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" onclick="submitPhoto()">업로드</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="serviceLogModal">
+    <div class="modal-content">
+      <div class="modal-header">서비스 일지</div>
+      <div class="form-group">
+        <label for="workDesc">작업 내용</label>
+        <textarea id="workDesc" rows="3" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg-card);color:var(--text);"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="laborTime">작업 시간(h)</label>
+        <input id="laborTime" type="number" step="0.1" value="1" />
+      </div>
+      <div class="form-group">
+        <label for="partsJson">부품 JSON</label>
+        <input id="partsJson" type="text" placeholder='[{"name":"필터","quantity":1,"price":8000}]' />
+      </div>
+      <div class="form-group">
+        <label for="logNotes">메모</label>
+        <input id="logNotes" type="text" />
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('serviceLogModal')">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" onclick="submitServiceLog()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="billingModal">
+    <div class="modal-content">
+      <div class="modal-header">비용 정산</div>
+      <div class="form-group"><label for="partsCost">부품비</label><input id="partsCost" type="number" value="0" /></div>
+      <div class="form-group"><label for="laborCost">공임</label><input id="laborCost" type="number" value="0" /></div>
+      <div class="form-group"><label for="serviceFee">출장비</label><input id="serviceFee" type="number" value="0" /></div>
+      <div class="form-group">
+        <label for="payMethod">결제 수단</label>
+        <select id="payMethod">
+          <option value="card">카드</option>
+          <option value="cash">현금</option>
+          <option value="transfer">이체</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="payStatus">결제 상태</label>
+        <select id="payStatus">
+          <option value="pending">대기</option>
+          <option value="completed">완료</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="billNotes">메모</label><input id="billNotes" type="text" /></div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('billingModal')">취소</button>
+        <button class="modal-btn modal-btn-submit" type="button" onclick="submitBilling()">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="galleryModal">
+    <div class="modal-content" style="max-width:720px;">
+      <div class="modal-header">사진 갤러리</div>
+      <div id="galleryBody" style="display:grid;gap:12px;max-height:60vh;overflow:auto;"></div>
+      <div class="modal-actions">
+        <button class="modal-btn modal-btn-cancel" type="button" onclick="closeModal('galleryModal')">닫기</button>
       </div>
     </div>
   </div>
@@ -548,14 +846,10 @@
       document.getElementById('statDone').textContent = stats.done;
     }
 
-    function filterByStatus(status) {
+    function filterByStatus(status, el) {
       currentFilter = status;
-
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-      });
-      event.target.classList.add('active');
-
+      document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+      if (el) el.classList.add('active');
       renderRequests();
     }
 
@@ -581,24 +875,30 @@
             <span class="as-status status-${req.status}">${getStatusLabel(req.status)}</span>
           </div>
           <div class="as-content">
-            <div class="as-customer">👤 ${req.customer_name}</div>
-            <div class="as-phone">📱 ${req.customer_phone}</div>
-            <div class="as-symptom">⚙️ ${req.symptom}</div>
+            <div class="as-customer">🏪 ${req.customer_name || '-'}</div>
+            <div class="as-phone">📱 ${req.customer_phone || '-'}</div>
             ${req.equipment_name ? `<div class="as-symptom">🔧 장비: ${req.equipment_name}</div>` : ''}
+            ${req.result ? `<div class="as-symptom">📟 상태: ${req.result}</div>` : ''}
+            <div class="as-symptom">🛠️ 점검: ${req.symptom || '-'}</div>
           </div>
           <div class="as-meta">
             <span>📅 ${formatDate(req.created_at)}</span>
+            ${req.scheduled_date ? `<span>🗓️ 방문 ${req.scheduled_date} ${req.scheduled_time || ''}</span>` : ''}
+            ${req.technician_id ? `<span>👷 ${req.technician_id}</span>` : ''}
+            ${req.billing_total != null ? `<span>💳 ${req.billing_total} · ${req.payment_status || ''}</span>` : ''}
             ${req.completed_at ? `<span>✅ 완료: ${formatDate(req.completed_at)}</span>` : ''}
           </div>
           <div class="as-actions">
             ${req.status !== 'done' ? `
-              <button class="status-btn primary" onclick="openStatusModal('${req.id}')">
-                상태 변경
-              </button>
+              <button class="status-btn primary" onclick="openStatusModal('${req.id}')">상태 변경</button>
             ` : ''}
-            <button class="status-btn" onclick="copyPhone('${req.customer_phone}')">
-              📋 전화번호 복사
-            </button>
+            <button class="status-btn" onclick="openScheduleModal('${req.id}')">스케줄</button>
+            <button class="status-btn" onclick="openPhotoModal('${req.id}', 'before')">현장사진</button>
+            <button class="status-btn" onclick="openServiceLogModal('${req.id}')">서비스일지</button>
+            <button class="status-btn" onclick="openPhotoModal('${req.id}', 'after')">완료사진</button>
+            <button class="status-btn" onclick="openBillingModal('${req.id}')">정산</button>
+            <button class="status-btn" onclick="openGalleryModal('${req.id}')">갤러리</button>
+            <button class="status-btn" onclick="copyPhone('${req.customer_phone}')">전화 복사</button>
           </div>
         </div>
       `).join('');
@@ -626,59 +926,362 @@
       return formatter.format(date);
     }
 
-    function openStatusModal(requestId) {
-      selectedRequestId = requestId;
-      document.getElementById('statusModal').classList.add('show');
+    let selectedPhotoType = 'before';
+
+    function authHeaders(json) {
+      const h = { 'Authorization': 'Bearer ' + localStorage.getItem('token') };
+      if (json) h['Content-Type'] = 'application/json';
+      return h;
     }
 
-    function closeStatusModal() {
-      document.getElementById('statusModal').classList.remove('show');
-      selectedRequestId = null;
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (!el) {
+        console.error('modal missing', id);
+        showToast('모달을 찾을 수 없습니다: ' + id);
+        return;
+      }
+      el.classList.add('show');
+      el.style.display = 'flex';
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.remove('show');
+      el.style.display = 'none';
+      if (id !== 'galleryModal') selectedRequestId = null;
+    }
+
+    let crmCache = [];
+    let currentView = 'as';
+
+    function showView(view) {
+      currentView = view;
+      document.getElementById('panelAs').style.display = view === 'as' ? 'block' : 'none';
+      document.getElementById('panelCrm').style.display = view === 'crm' ? 'block' : 'none';
+      if (view === 'crm') loadCrm();
+    }
+
+    function openCustomerModal() {
+      document.getElementById('custWash').value = '';
+      document.getElementById('custContact').value = '';
+      document.getElementById('custPhone').value = '';
+      document.getElementById('custAddress').value = '';
+      document.getElementById('custMemo').value = '';
+      openModal('customerModal');
+      setTimeout(() => document.getElementById('custWash').focus(), 50);
+    }
+
+    async function submitCustomer() {
+      const wash_name = document.getElementById('custWash').value.trim();
+      const contact_name = document.getElementById('custContact').value.trim();
+      const phone = document.getElementById('custPhone').value.trim();
+      const address = document.getElementById('custAddress').value.trim();
+      const memo = document.getElementById('custMemo').value.trim();
+      if (!wash_name || !phone) {
+        showToast('세차장명과 전화번호는 필수입니다');
+        return;
+      }
+      try {
+        const response = await fetch('/customers', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ wash_name, contact_name, phone, address, memo })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '고객 저장 실패');
+        showToast((data.updated ? 'CRM 갱신' : 'CRM 등록') + ' · ' + wash_name);
+        closeModal('customerModal');
+        await loadCrm();
+        if (currentView !== 'crm') showView('crm');
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+
+    async function loadCrm() {
+      const box = document.getElementById('crmList');
+      try {
+        const res = await fetch('/customers', { headers: authHeaders(false) });
+        if (res.status === 401) {
+          localStorage.clear();
+          location.href = '/admin/login.html';
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'CRM 로드 실패');
+        crmCache = Array.isArray(data) ? data : [];
+        if (!crmCache.length) {
+          box.innerHTML = '<div class="empty">등록된 세차장 고객이 없습니다. 「＋ 고객 등록」으로 추가하세요.</div>';
+          return;
+        }
+        box.innerHTML = crmCache.map((c) => `
+          <div class="as-card">
+            <div class="as-header">
+              <div>
+                <div class="as-customer">🏪 ${c.wash_name || '-'}</div>
+                <div class="as-receipt">${c.crm_id || c.id || ''}</div>
+              </div>
+              <span class="as-status status-assigned">CRM</span>
+            </div>
+            <div class="as-content">
+              <div class="as-phone">📱 ${c.phone || '-'}${c.contact_name ? ' · 담당 ' + c.contact_name : ''}</div>
+              <div class="as-symptom">📍 ${c.address || '주소 미입력'}</div>
+              ${c.memo ? `<div class="as-symptom">📝 ${c.memo}</div>` : ''}
+            </div>
+            <div class="as-actions">
+              <button class="status-btn primary" type="button" onclick="openAsModal('${c.crm_id}')">이 세차장 AS 접수</button>
+              <button class="status-btn" type="button" onclick="copyPhone('${c.phone || ''}')">전화 복사</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        box.innerHTML = `<div class="empty">${e.message}</div>`;
+      }
+    }
+
+    async function fillCrmSelect(selectedId) {
+      if (!crmCache.length) {
+        const res = await fetch('/customers', { headers: authHeaders(false) });
+        const data = await res.json();
+        crmCache = Array.isArray(data) ? data : [];
+      }
+      const sel = document.getElementById('asCrm');
+      sel.innerHTML = '<option value="">세차장 선택</option>' +
+        crmCache.map((c) => `<option value="${c.crm_id}" ${selectedId === c.crm_id ? 'selected' : ''}>${c.wash_name} (${c.phone})</option>`).join('');
+    }
+
+    async function openAsModal(crmId) {
+      document.getElementById('asEquipment').value = '';
+      document.getElementById('asEquipStatus').value = '';
+      document.getElementById('asInspection').value = '';
+      document.getElementById('asAddress').value = '';
+      await fillCrmSelect(crmId || '');
+      if (!crmCache.length) {
+        showToast('먼저 고객(세차장)을 등록하세요');
+        openCustomerModal();
+        return;
+      }
+      openModal('asModal');
+    }
+
+    async function submitAs() {
+      const crm_id = document.getElementById('asCrm').value;
+      const equipment_name = document.getElementById('asEquipment').value.trim();
+      const equipment_status = document.getElementById('asEquipStatus').value;
+      const inspection_note = document.getElementById('asInspection').value.trim();
+      const address = document.getElementById('asAddress').value.trim();
+      if (!crm_id || !equipment_name || !inspection_note) {
+        showToast('세차장, 장비명, 점검 내용은 필수입니다');
+        return;
+      }
+      try {
+        const response = await fetch('/as/register', {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({ crm_id, equipment_name, equipment_status, inspection_note, address })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'AS 접수 실패');
+        showToast('AS 접수 · #' + (data.receipt_no || data.id?.slice(0, 8)));
+        closeModal('asModal');
+        showView('as');
+        await loadRequests();
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+
+    function openStatusModal(requestId) {
+      selectedRequestId = requestId;
+      openModal('statusModal');
+    }
+
+    function openScheduleModal(requestId) {
+      selectedRequestId = requestId;
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('schedDate').value = today;
+      openModal('scheduleModal');
+    }
+
+    function openPhotoModal(requestId, photoType) {
+      selectedRequestId = requestId;
+      selectedPhotoType = photoType;
+      document.getElementById('photoModalTitle').textContent =
+        photoType === 'after' ? '완료사진 업로드' : '현장사진 업로드';
+      document.getElementById('photoFile').value = '';
+      openModal('photoModal');
+    }
+
+    function openServiceLogModal(requestId) {
+      selectedRequestId = requestId;
+      openModal('serviceLogModal');
+    }
+
+    function openBillingModal(requestId) {
+      selectedRequestId = requestId;
+      openModal('billingModal');
+    }
+
+    async function openGalleryModal(requestId) {
+      selectedRequestId = requestId;
+      const body = document.getElementById('galleryBody');
+      body.innerHTML = '<div class="loading">로딩…</div>';
+      openModal('galleryModal');
+      try {
+        const listRes = await fetch(`/as/${requestId}/photos`, { headers: authHeaders(false) });
+        const photos = await listRes.json();
+        if (!listRes.ok) throw new Error(photos.error || '목록 실패');
+        if (!photos.length) {
+          body.innerHTML = '<div class="empty">사진 없음</div>';
+          return;
+        }
+        const cards = [];
+        for (const p of photos) {
+          const cRes = await fetch(p.content_url, { headers: authHeaders(false) });
+          const c = await cRes.json();
+          cards.push(`<div class="gallery-item"><div class="as-receipt">${p.photo_type} · ${p.uploaded_at || ''}</div><img src="${c.data_url || ''}" alt="${p.photo_type}" /></div>`);
+        }
+        body.innerHTML = cards.join('');
+      } catch (e) {
+        body.innerHTML = `<div class="empty">${e.message}</div>`;
+      }
     }
 
     async function submitStatusChange() {
       if (!selectedRequestId) return;
-
       const newStatus = document.getElementById('newStatus').value;
-      const token = localStorage.getItem('token');
-
       try {
         const response = await fetch(`/as/${selectedRequestId}/status`, {
           method: 'PUT',
-          headers: {
-            'Authorization': 'Bearer ' + token,
-            'Content-Type': 'application/json'
-          },
+          headers: authHeaders(true),
           body: JSON.stringify({ status: newStatus })
         });
-
-        if (response.ok) {
-          showToast(`✅ 상태 변경됨: ${getStatusLabel(newStatus)}`);
-          closeStatusModal();
-          await loadRequests();
-        } else {
-          const data = await response.json();
-          showToast('❌ ' + (data.error || '변경 실패'));
-        }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '변경 실패');
+        showToast('상태 변경: ' + getStatusLabel(newStatus));
+        closeModal('statusModal');
+        await loadRequests();
       } catch (error) {
-        showToast('❌ 오류: ' + error.message);
+        showToast(error.message);
       }
     }
 
-    function copyPhone(phone) {
-      navigator.clipboard.writeText(phone).then(() => {
-        showToast('📋 전화번호 복사됨');
+    async function submitSchedule() {
+      if (!selectedRequestId) return;
+      try {
+        const response = await fetch(`/as/${selectedRequestId}/schedule`, {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            scheduled_date: document.getElementById('schedDate').value,
+            scheduled_time: document.getElementById('schedTime').value,
+            technician_id: document.getElementById('schedTech').value || 'unassigned',
+            address: document.getElementById('schedAddr').value,
+            notes: document.getElementById('schedNotes').value
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '스케줄 저장 실패');
+        showToast('스케줄 저장됨');
+        closeModal('scheduleModal');
+      } catch (e) { showToast(e.message); }
+    }
+
+    function readFileAsDataURL(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
       });
+    }
+
+    async function submitPhoto() {
+      if (!selectedRequestId) return;
+      const file = document.getElementById('photoFile').files[0];
+      if (!file) { showToast('파일을 선택하세요'); return; }
+      try {
+        const dataUrl = await readFileAsDataURL(file);
+        const response = await fetch(`/as/${selectedRequestId}/photo`, {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            photo_type: selectedPhotoType,
+            image_base64: dataUrl,
+            mime: file.type || 'image/jpeg',
+            original_name: file.name
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '업로드 실패');
+        showToast((selectedPhotoType === 'after' ? '완료' : '현장') + '사진 업로드됨');
+        closeModal('photoModal');
+      } catch (e) { showToast(e.message); }
+    }
+
+    async function submitServiceLog() {
+      if (!selectedRequestId) return;
+      let parts = [];
+      const raw = document.getElementById('partsJson').value.trim();
+      if (raw) {
+        try { parts = JSON.parse(raw); }
+        catch (_) { showToast('부품 JSON 형식 오류'); return; }
+      }
+      try {
+        const response = await fetch(`/as/${selectedRequestId}/service-log`, {
+          method: 'PUT',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            work_description: document.getElementById('workDesc').value,
+            labor_time: Number(document.getElementById('laborTime').value || 0),
+            notes: document.getElementById('logNotes').value,
+            parts_used: parts
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '일지 저장 실패');
+        showToast('서비스 일지 저장됨');
+        closeModal('serviceLogModal');
+      } catch (e) { showToast(e.message); }
+    }
+
+    async function submitBilling() {
+      if (!selectedRequestId) return;
+      const parts = Number(document.getElementById('partsCost').value || 0);
+      const labor = Number(document.getElementById('laborCost').value || 0);
+      const fee = Number(document.getElementById('serviceFee').value || 0);
+      try {
+        const response = await fetch(`/as/${selectedRequestId}/billing`, {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify({
+            parts_cost: parts,
+            labor_cost: labor,
+            service_fee: fee,
+            total: parts + labor + fee,
+            payment_method: document.getElementById('payMethod').value,
+            payment_status: document.getElementById('payStatus').value,
+            notes: document.getElementById('billNotes').value
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '정산 저장 실패');
+        showToast('정산 저장됨 · 합계 ' + (parts + labor + fee));
+        closeModal('billingModal');
+      } catch (e) { showToast(e.message); }
+    }
+
+    function copyPhone(phone) {
+      navigator.clipboard.writeText(phone).then(() => showToast('전화번호 복사됨'));
     }
 
     function showToast(message) {
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.classList.add('show');
-
-      setTimeout(() => {
-        toast.classList.remove('show');
-      }, 3000);
+      setTimeout(() => toast.classList.remove('show'), 3000);
     }
 
     function logout() {
@@ -688,14 +1291,23 @@
       }
     }
 
-    // 모달 외부 클릭 시 닫기
-    document.getElementById('statusModal').addEventListener('click', (e) => {
-      if (e.target.id === 'statusModal') {
-        closeStatusModal();
-      }
+    ['customerModal','asModal','statusModal','scheduleModal','photoModal','serviceLogModal','billingModal','galleryModal'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', (e) => {
+        if (e.target.id === id) closeModal(id);
+      });
     });
 
-    // 페이지 로드
+    document.getElementById('btnViewAs').addEventListener('click', () => showView('as'));
+    document.getElementById('btnViewCrm').addEventListener('click', () => showView('crm'));
+    document.getElementById('btnCustomerReg').addEventListener('click', openCustomerModal);
+    document.getElementById('btnAsReg').addEventListener('click', () => openAsModal(''));
+    document.getElementById('btnCustomerCancel').addEventListener('click', () => closeModal('customerModal'));
+    document.getElementById('btnCustomerSave').addEventListener('click', submitCustomer);
+    document.getElementById('btnAsCancel').addEventListener('click', () => closeModal('asModal'));
+    document.getElementById('btnAsSave').addEventListener('click', submitAs);
+
     init();
   </script>
 </body>

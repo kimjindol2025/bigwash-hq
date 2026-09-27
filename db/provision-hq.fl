@@ -1,0 +1,100 @@
+;; Provision HQ schema + seed company/admin/staff
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+
+(define SCHEMA_PATH "/home/kim/kim/projects/bigwash-as/db/hq-schema.v1.json")
+(define ADMIN_PASSWORD (?? (shell_env "ADMIN_PASSWORD") "admin123"))
+(define COMPANY_ID "company-hq-001")
+
+(defn provision-table [$table]
+  (let [$response (db-create-table $table)
+        $name (get $table "name")
+        $status (get $response "status")]
+    (if (or (= $status 200) (= $status 201) (= $status 409))
+      (println (str "[hq-db] table ready=" $name " status=" $status))
+      (println (str "[hq-db] ERROR table=" $name " status=" $status
+                    " err=" (?? (get $response "error") "")
+                    " msg=" (?? (get $response "message") ""))))))
+
+(defn seed! []
+  (do
+    (let [$cq (db-get-row "hq_companies" COMPANY_ID)]
+      (if (or (not (get $cq "ok")) (nil? (db-row $cq)))
+        (db-insert "hq_companies"
+                   {"company_id" COMPANY_ID
+                    "name" "빅워시 본사"
+                    "status" "active"
+                    "created_at" (iso-now)})
+        (println "[hq-db] company exists")))
+    (let [$uq (db-query "hq_users" {"login" "admin"})
+          $rows (db-rows $uq)
+          $now (iso-now)]
+      (if (> (length $rows) 0)
+        (println "[hq-db] admin user exists")
+        (do
+          (db-insert "hq_users"
+                     {"user_id" "user-admin-001"
+                      "company_id" COMPANY_ID
+                      "login" "admin"
+                      "password_hash" (auth-hash-password ADMIN_PASSWORD)
+                      "name" "본사관리자"
+                      "phone" "031-1688-7759"
+                      "email" "admin@bigwash.local"
+                      "role" "admin"
+                      "org_id" "org-hq"
+                      "employment_status" "active"
+                      "hired_on" ""
+                      "regions" "본사"
+                      "skills" "관리"
+                      "daily_cap" 0
+                      "note" ""
+                      "created_at" $now
+                      "updated_at" $now})
+          (db-insert "hq_users"
+                     {"user_id" "user-tech-a"
+                      "company_id" COMPANY_ID
+                      "login" "tech_a"
+                      "password_hash" (auth-hash-password "tech123")
+                      "name" "기사A"
+                      "phone" "010-2000-0001"
+                      "email" ""
+                      "role" "dispatcher"
+                      "org_id" "org-hq"
+                      "employment_status" "active"
+                      "hired_on" ""
+                      "regions" "강남"
+                      "skills" "고압,진공"
+                      "daily_cap" 6
+                      "note" ""
+                      "created_at" $now
+                      "updated_at" $now})
+          (db-insert "hq_users"
+                     {"user_id" "user-tech-b"
+                      "company_id" COMPANY_ID
+                      "login" "tech_b"
+                      "password_hash" (auth-hash-password "tech123")
+                      "name" "기사B"
+                      "phone" "010-2000-0002"
+                      "email" ""
+                      "role" "technician"
+                      "org_id" "org-hq"
+                      "employment_status" "leave"
+                      "hired_on" ""
+                      "regions" "분당"
+                      "skills" "자동세차"
+                      "daily_cap" 4
+                      "note" "휴직"
+                      "created_at" $now
+                      "updated_at" $now})
+          (println "[hq-db] seeded admin / tech_a / tech_b(leave)"))))))
+
+(if (or (= AFLDB_URL "") (= AFLDB_ADMIN_KEY "") (= AFLDB_WRITE_KEY ""))
+  (println "[hq-db] ERROR: AFLDB keys required")
+  (let [$schema (json-parse (file-read SCHEMA_PATH))]
+    (do
+      (println (str "[hq-db] provisioning " (get $schema "schema") " " (get $schema "version")))
+      (reduce (fn [$acc $table]
+                (do (provision-table $table) (append $acc [true])))
+              []
+              (get $schema "tables"))
+      (seed!)
+      (println "[hq-db] complete"))))

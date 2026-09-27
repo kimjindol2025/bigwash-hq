@@ -228,11 +228,11 @@ GET /customer/requests?phone=010-xxxx-xxxx
 
 | Week | 기능 | 라인 수 | 테스트 | 상태 |
 |------|------|--------|--------|------|
-| 1 | 스케줄 + 현장사진 | 400줄 | 12개 | ⏳ |
-| 2 | 서비스일지 + 완료사진 | 350줄 | 10개 | ⏳ |
-| 3 | 비용정산 | 300줄 | 8개 | ⏳ |
-| 4 | 고객대시보드 + 통합 | 450줄 | 15개 | ⏳ |
-| **합계** | **6대 기능** | **1,500줄** | **45개** | **⏳** |
+| 1 | 스케줄 + 현장사진 | AFJ | phase2-smoke | ✅ |
+| 2 | 서비스일지 + 완료사진 | AFJ | phase2-smoke | ✅ |
+| 3 | 비용정산 | AFJ | phase2-smoke | ✅ |
+| 4 | 고객대시보드 + 통합 | AFJ | phase2-smoke | ✅ |
+| **합계** | **6대 기능** | AFL-DB | `npm run test:phase2` | ✅ |
 
 ---
 
@@ -370,14 +370,16 @@ CREATE TABLE as_billing (
 
 ## ✅ Phase 2 완료 체크리스트
 
-- [ ] 스케줄 API + UI (Week 1)
-- [ ] 사진 업로드 (Week 1-2)
-- [ ] 서비스 일지 (Week 2)
-- [ ] 비용 정산 (Week 3)
-- [ ] 고객 대시보드 (Week 4)
-- [ ] PostgreSQL 마이그레이션 (Week 4)
-- [ ] 45개 테스트 추가 (전체)
-- [ ] v2.0 배포 준비
+- [x] 스케줄 API + UI (Week 1) — AFJ + AFL-DB `bigwash_schedules`
+- [x] 사진 업로드 (Week 1-2) — base64 → `uploads/photos` + `bigwash_photos`
+- [x] 서비스 일지 (Week 2) — `bigwash_service_logs` / `bigwash_parts`
+- [x] 비용 정산 (Week 3) — `bigwash_billing`
+- [x] 고객 대시보드 (Week 4) — `/customer.html` + `/customer/requests`
+- [x] 공개 접수 — `/register.html`
+- [x] 영속 저장소 — AFL-DB V2 (PostgreSQL 대신)
+- [x] Phase2 자동 스모크 — `tests/phase2-smoke.sh` (`npm run test:phase2`)
+- [x] 배포 헬퍼 — `scripts/deploy.sh` (AFJ/AFL-DB)
+- [ ] 대시보드 탭 분리·알림 실연동·PM2 정식 등록 — [`PLAN.md`](PLAN.md) 남은 일
 
 ---
 

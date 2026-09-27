@@ -1,0 +1,181 @@
+{
+  "schema": "bigwash-hq",
+  "version": "v1",
+  "database_id": "bigwash-hq",
+  "tables": [
+    {
+      "name": "hq_companies",
+      "primary_key": "company_id",
+      "columns": [
+        {"name": "company_id", "type": "string"},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "status", "type": "string", "required": true},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_users",
+      "primary_key": "user_id",
+      "columns": [
+        {"name": "user_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "login", "type": "string", "required": true, "unique": true, "indexed": true},
+        {"name": "password_hash", "type": "string", "required": true},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "phone", "type": "string"},
+        {"name": "email", "type": "string"},
+        {"name": "role", "type": "string", "required": true, "indexed": true},
+        {"name": "org_id", "type": "string"},
+        {"name": "employment_status", "type": "string", "required": true, "indexed": true},
+        {"name": "hired_on", "type": "string"},
+        {"name": "regions", "type": "string"},
+        {"name": "skills", "type": "string"},
+        {"name": "daily_cap", "type": "number"},
+        {"name": "note", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_customers",
+      "primary_key": "customer_id",
+      "columns": [
+        {"name": "customer_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "type", "type": "string", "required": true},
+        {"name": "display_name", "type": "string", "required": true, "indexed": true},
+        {"name": "legal_name", "type": "string"},
+        {"name": "primary_phone", "type": "string", "required": true, "indexed": true},
+        {"name": "extra_phone", "type": "string"},
+        {"name": "contact_name", "type": "string"},
+        {"name": "contact_phone", "type": "string"},
+        {"name": "address", "type": "string"},
+        {"name": "visit_note", "type": "string"},
+        {"name": "status", "type": "string", "required": true, "indexed": true},
+        {"name": "account_owner_user_id", "type": "string"},
+        {"name": "tags", "type": "string"},
+        {"name": "hours_note", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_phone_history",
+      "primary_key": "history_id",
+      "columns": [
+        {"name": "history_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "required": true, "indexed": true},
+        {"name": "phone", "type": "string", "required": true, "indexed": true},
+        {"name": "kind", "type": "string"},
+        {"name": "changed_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_equipment",
+      "primary_key": "equipment_id",
+      "columns": [
+        {"name": "equipment_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "required": true, "indexed": true},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "model", "type": "string"},
+        {"name": "serial", "type": "string", "indexed": true},
+        {"name": "installed_on", "type": "string"},
+        {"name": "warranty_until", "type": "string"},
+        {"name": "location_note", "type": "string"},
+        {"name": "status", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_tickets",
+      "primary_key": "ticket_id",
+      "columns": [
+        {"name": "ticket_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "number", "type": "string", "required": true, "unique": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "required": true, "indexed": true},
+        {"name": "equipment_id", "type": "string", "required": true, "indexed": true},
+        {"name": "symptom", "type": "string", "required": true},
+        {"name": "fault_type", "type": "string"},
+        {"name": "urgency", "type": "string", "required": true, "indexed": true},
+        {"name": "status", "type": "string", "required": true, "indexed": true},
+        {"name": "assignee_id", "type": "string", "indexed": true},
+        {"name": "scheduled_at", "type": "string", "indexed": true},
+        {"name": "work_note", "type": "string"},
+        {"name": "bill_type", "type": "string"},
+        {"name": "bill_amount", "type": "number"},
+        {"name": "followup_status", "type": "string"},
+        {"name": "occurred_at", "type": "string"},
+        {"name": "preferred_at", "type": "string"},
+        {"name": "intake_phone", "type": "string"},
+        {"name": "intake_memo", "type": "string"},
+        {"name": "cancel_reason", "type": "string"},
+        {"name": "photo_incomplete", "type": "string"},
+        {"name": "is_repeat", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true, "indexed": true},
+        {"name": "updated_at", "type": "string", "required": true},
+        {"name": "completed_at", "type": "string"}
+      ]
+    },
+    {
+      "name": "hq_ticket_events",
+      "primary_key": "event_id",
+      "columns": [
+        {"name": "event_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "required": true, "indexed": true},
+        {"name": "actor_id", "type": "string"},
+        {"name": "type", "type": "string", "required": true},
+        {"name": "from_status", "type": "string"},
+        {"name": "to_status", "type": "string"},
+        {"name": "memo", "type": "string"},
+        {"name": "at", "type": "string", "required": true, "indexed": true}
+      ]
+    },
+    {
+      "name": "hq_photos",
+      "primary_key": "photo_id",
+      "columns": [
+        {"name": "photo_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "required": true, "indexed": true},
+        {"name": "side", "type": "string", "required": true},
+        {"name": "slot", "type": "number", "required": true},
+        {"name": "file_path", "type": "string"},
+        {"name": "mime", "type": "string"},
+        {"name": "uploader_id", "type": "string"},
+        {"name": "uploaded_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_call_logs",
+      "primary_key": "call_id",
+      "columns": [
+        {"name": "call_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "indexed": true},
+        {"name": "ticket_id", "type": "string", "indexed": true},
+        {"name": "phone", "type": "string", "required": true, "indexed": true},
+        {"name": "call_type", "type": "string", "required": true},
+        {"name": "memo", "type": "string"},
+        {"name": "actor_id", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true, "indexed": true}
+      ]
+    },
+    {
+      "name": "hq_parts",
+      "primary_key": "part_id",
+      "columns": [
+        {"name": "part_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "required": true, "indexed": true},
+        {"name": "part_name", "type": "string", "required": true},
+        {"name": "quantity", "type": "number"},
+        {"name": "unit_price", "type": "number"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "schema": "bigwash-hq-ext",
+  "version": "v1",
+  "tables": [
+    {
+      "name": "hq_regions",
+      "primary_key": "region_id",
+      "columns": [
+        {"name": "region_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "metro", "type": "string", "required": true},
+        {"name": "detail", "type": "string"},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "travel_fee", "type": "number", "required": true},
+        {"name": "status", "type": "string", "required": true},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_products",
+      "primary_key": "product_id",
+      "columns": [
+        {"name": "product_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "category", "type": "string", "indexed": true},
+        {"name": "spec", "type": "string"},
+        {"name": "sku", "type": "string"},
+        {"name": "sale_price", "type": "number", "required": true},
+        {"name": "cost_price", "type": "number"},
+        {"name": "unit", "type": "string"},
+        {"name": "status", "type": "string", "required": true},
+        {"name": "description", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_ticket_finance",
+      "primary_key": "ticket_id",
+      "columns": [
+        {"name": "ticket_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_type", "type": "string"},
+        {"name": "region_id", "type": "string", "indexed": true},
+        {"name": "travel_fee", "type": "number"},
+        {"name": "settlement_status", "type": "string", "indexed": true},
+        {"name": "settlement_paid", "type": "number"},
+        {"name": "settlement_method", "type": "string"},
+        {"name": "work_log", "type": "string"},
+        {"name": "doc_ready", "type": "string"},
+        {"name": "updated_at", "type": "string"}
+      ]
+    },
+    {
+      "name": "hq_documents",
+      "primary_key": "doc_id",
+      "columns": [
+        {"name": "doc_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "indexed": true},
+        {"name": "customer_id", "type": "string", "indexed": true},
+        {"name": "doc_type", "type": "string", "required": true},
+        {"name": "number", "type": "string", "required": true},
+        {"name": "issued_at", "type": "string", "required": true},
+        {"name": "total", "type": "number"},
+        {"name": "bill_type", "type": "string"},
+        {"name": "travel_fee", "type": "number"},
+        {"name": "labor_fee", "type": "number"},
+        {"name": "lines_json", "type": "string"},
+        {"name": "memo", "type": "string"},
+        {"name": "status", "type": "string"},
+        {"name": "body_text", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_expenses",
+      "primary_key": "expense_id",
+      "columns": [
+        {"name": "expense_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "user_id", "type": "string", "indexed": true},
+        {"name": "amount", "type": "number", "required": true},
+        {"name": "category", "type": "string"},
+        {"name": "memo", "type": "string"},
+        {"name": "receipt_note", "type": "string"},
+        {"name": "status", "type": "string", "required": true, "indexed": true},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "decided_at", "type": "string"}
+      ]
+    },
+    {
+      "name": "hq_payroll",
+      "primary_key": "payroll_id",
+      "columns": [
+        {"name": "payroll_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "user_id", "type": "string", "required": true, "indexed": true},
+        {"name": "year_month", "type": "string", "required": true, "indexed": true},
+        {"name": "base_pay", "type": "number"},
+        {"name": "allowances", "type": "number"},
+        {"name": "deductions", "type": "number"},
+        {"name": "total", "type": "number"},
+        {"name": "note", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_opex",
+      "primary_key": "opex_id",
+      "columns": [
+        {"name": "opex_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "year_month", "type": "string", "required": true, "indexed": true},
+        {"name": "category", "type": "string", "required": true},
+        {"name": "amount", "type": "number", "required": true},
+        {"name": "memo", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    }
+  ]
+}

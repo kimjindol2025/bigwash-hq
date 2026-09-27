@@ -1,0 +1,422 @@
+;; Phase 2 APIs — schedule / photos / service-log / billing / customer
+;; Loaded by server.fl (AFJ + AFL-DB)
+
+(define UPLOAD_DIR (str ROOT "/uploads/photos"))
+
+(defn ensure-upload-dir! []
+  (try
+    (do
+      (if (not (file-exists (str ROOT "/uploads")))
+        (file-mkdir (str ROOT "/uploads")))
+      (if (not (file-exists UPLOAD_DIR))
+        (file-mkdir UPLOAD_DIR))
+      true)
+    (catch $err
+      (do (println (str "[bigwash-as] upload dir warn: " $err)) false))))
+
+(defn find-as [$id]
+  (let [$q (db-get-row "bigwash_as_requests" $id)
+        $row (db-row $q)]
+    (if (or (not (get $q "ok")) (nil? $row))
+      nil
+      $row)))
+
+(defn require-as-admin [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      $auth
+      (let [$id (server-req-param $req "id")
+            $row (find-as $id)]
+        (if (nil? $row)
+          {"ok" false "status" 404 "error" "Not found"}
+          {"ok" true "admin" (get $auth "admin") "as" $row "id" $id})))))
+
+(defn valid-photo-type? [$t]
+  (or (= $t "before") (= $t "after")))
+
+(defn valid-pay-method? [$m]
+  (or (= $m "card") (= $m "cash") (= $m "transfer")))
+
+(defn valid-pay-status? [$s]
+  (or (= $s "pending") (= $s "completed")))
+
+(defn strip-data-url-prefix [$s]
+  (let [$idx (str-index-of $s ",")]
+    (if (< $idx 0) $s (slice $s (+ $idx 1)))))
+
+(defn detect-mime [$body]
+  (let [$m (?? (get $body "mime") "")
+        $raw (?? (get $body "image_base64") "")
+        $from-url (if (str-starts-with $raw "data:")
+                    (let [$a (str-index-of $raw ":")
+                          $b (str-index-of $raw ";")]
+                      (if (and (>= $a 0) (> $b $a)) (slice $raw (+ $a 1) $b) ""))
+                    "")]
+    (if (not (= $m "")) $m
+        (if (not (= $from-url "")) $from-url "image/jpeg"))))
+
+;; ── Schedule ───────────────────────────────────────────────
+
+(defn handle-schedule-post [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $as (get $gate "as")
+            $body (req-body $req)
+            $date (get $body "scheduled_date")
+            $time (get $body "scheduled_time")]
+        (if (or (nil? $date) (= $date "") (nil? $time) (= $time ""))
+          (json-err 400 "scheduled_date and scheduled_time are required")
+          (let [$sid (str "schedule-" $id)
+                $now (iso-now)
+                $existing (db-get-row "bigwash_schedules" $sid)
+                $row {"schedule_id" $sid
+                      "as_request_id" $id
+                      "scheduled_date" $date
+                      "scheduled_time" $time
+                      "technician_id" (?? (get $body "technician_id") "unassigned")
+                      "address" (?? (get $body "address") (?? (get $as "address") ""))
+                      "notes" (?? (get $body "notes") "")
+                      "created_at" $now
+                      "updated_at" $now}
+                $res (if (and (get $existing "ok") (not (nil? (db-row $existing))))
+                       (db-patch "bigwash_schedules" $sid
+                                 {"scheduled_date" $date
+                                  "scheduled_time" $time
+                                  "technician_id" (get $row "technician_id")
+                                  "address" (get $row "address")
+                                  "notes" (get $row "notes")
+                                  "updated_at" $now})
+                       (db-insert "bigwash_schedules" $row))]
+            (if (not (get $res "ok"))
+              (json-err 500 (?? (get $res "message") "schedule save failed"))
+              (do
+                (db-patch "bigwash_as_requests" $id {"updated_at" $now})
+                (json-created {"id" $sid
+                               "scheduled_date" $date
+                               "scheduled_time" $time
+                               "technician_id" (get $row "technician_id")})))))))))
+
+(defn handle-schedule-get [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$sid (str "schedule-" (get $gate "id"))
+            $q (db-get-row "bigwash_schedules" $sid)
+            $row (db-row $q)]
+        (if (or (not (get $q "ok")) (nil? $row))
+          (json-err 404 "Schedule not found")
+          (json-ok $row))))))
+
+;; ── Photos ─────────────────────────────────────────────────
+
+(defn handle-photo-post [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $body (req-body $req)
+            $ptype (get $body "photo_type")
+            $raw (?? (get $body "image_base64") "")]
+        (if (not (valid-photo-type? $ptype))
+          (json-err 400 "photo_type must be \"before\" or \"after\"")
+          (if (or (nil? $raw) (= $raw ""))
+            (json-err 400 "image_base64 is required")
+            (let [$b64 (strip-data-url-prefix $raw)
+                  $mime (detect-mime $body)]
+              (if (> (length $b64) 700000)
+                (json-err 400 "image too large (max ~500KB)")
+                (do
+                  (ensure-upload-dir!)
+                  (let [$pid (new-id "photo")
+                        $path (str UPLOAD_DIR "/" $pid ".b64")
+                        $now (iso-now)]
+                    (try
+                      (do
+                        (file-write $path $b64)
+                        (let [$ins (db-insert "bigwash_photos"
+                                              {"photo_id" $pid
+                                               "as_request_id" $id
+                                               "photo_type" $ptype
+                                               "file_path" $path
+                                               "mime" $mime
+                                               "original_name" (?? (get $body "original_name") "")
+                                               "file_size" (length $b64)
+                                               "uploaded_at" $now})]
+                          (if (not (get $ins "ok"))
+                            (json-err 500 (?? (get $ins "message") "photo meta save failed"))
+                            (do
+                              (db-patch "bigwash_as_requests" $id {"updated_at" $now})
+                              (json-created {"id" $pid
+                                             "photo_type" $ptype
+                                             "file_path" (str "/as/" $id "/photos/" $pid "/content")
+                                             "uploaded_at" $now})))))
+                      (catch $err
+                        (json-err 500 (str "photo write failed: " $err))))))))))))))
+
+(defn handle-photos-list [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $q (db-query "bigwash_photos" {"as_request_id" $id})
+            $rows (db-rows $q)]
+        (if (not (get $q "ok"))
+          (json-err 503 "database unavailable")
+          (let [$sorted (reverse (sort-by (fn [$r] (get $r "uploaded_at")) $rows))
+                $mapped (map (fn [$r]
+                               {"id" (get $r "photo_id")
+                                "photo_type" (get $r "photo_type")
+                                "mime" (get $r "mime")
+                                "original_name" (get $r "original_name")
+                                "file_size" (get $r "file_size")
+                                "uploaded_at" (get $r "uploaded_at")
+                                "content_url" (str "/as/" $id "/photos/" (get $r "photo_id") "/content")})
+                             $sorted)]
+            (json-ok $mapped)))))))
+
+(defn handle-photo-content [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$pid (server-req-param $req "photoId")
+            $q (db-get-row "bigwash_photos" $pid)
+            $row (db-row $q)]
+        (if (or (not (get $q "ok")) (nil? $row))
+          (json-err 404 "Photo not found")
+          (if (not (= (get $row "as_request_id") (get $gate "id")))
+            (json-err 404 "Photo not found")
+            (try
+              (let [$b64 (file-read (get $row "file_path"))
+                    $mime (?? (get $row "mime") "image/jpeg")]
+                (json-ok {"id" $pid
+                          "photo_type" (get $row "photo_type")
+                          "data_url" (str "data:" $mime ";base64," $b64)}))
+              (catch $err
+                (json-err 500 (str "photo read failed: " $err))))))))))
+
+;; ── Service log ────────────────────────────────────────────
+
+(defn insert-parts! [$log-id $parts]
+  (reduce (fn [$acc $part]
+            (let [$name (?? (get $part "name") (?? (get $part "part_name") ""))
+                  $qty (?? (get $part "quantity") 1)
+                  $price (?? (get $part "price") (?? (get $part "unit_price") 0))
+                  $total (* $qty $price)
+                  $pid (new-id "part")]
+              (do
+                (db-insert "bigwash_parts"
+                           {"part_id" $pid
+                            "service_log_id" $log-id
+                            "part_name" $name
+                            "quantity" $qty
+                            "unit_price" $price
+                            "total_price" $total})
+                (append $acc [$pid]))))
+          []
+          (if (nil? $parts) [] $parts)))
+
+(defn parts-for-log [$log-id]
+  (db-rows (db-query "bigwash_parts" {"service_log_id" $log-id})))
+
+(defn handle-service-log-put [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $body (req-body $req)
+            $desc (get $body "work_description")]
+        (if (or (nil? $desc) (= $desc ""))
+          (json-err 400 "work_description is required")
+          (let [$lid (new-id "slog")
+                $now (iso-now)
+                $labor (?? (get $body "labor_time") 0)
+                $notes (?? (get $body "notes") "")
+                $parts (get $body "parts_used")
+                $ins (db-insert "bigwash_service_logs"
+                                {"log_id" $lid
+                                 "as_request_id" $id
+                                 "work_description" $desc
+                                 "labor_time" $labor
+                                 "notes" $notes
+                                 "recorded_at" $now})]
+            (if (not (get $ins "ok"))
+              (json-err 500 (?? (get $ins "message") "service log save failed"))
+              (do
+                (insert-parts! $lid $parts)
+                (db-patch "bigwash_as_requests" $id {"updated_at" $now})
+                (json-ok {"id" $lid
+                          "work_description" $desc
+                          "labor_time" $labor
+                          "parts_count" (if (nil? $parts) 0 (length $parts))
+                          "recorded_at" $now})))))))))
+
+(defn handle-service-log-get [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $q (db-query "bigwash_service_logs" {"as_request_id" $id})
+            $rows (db-rows $q)]
+        (if (not (get $q "ok"))
+          (json-err 503 "database unavailable")
+          (if (= (length $rows) 0)
+            (json-ok nil)
+            (let [$sorted (reverse (sort-by (fn [$r] (get $r "recorded_at")) $rows))
+                  $latest (get $sorted 0)]
+              (json-ok {"id" (get $latest "log_id")
+                        "as_request_id" $id
+                        "work_description" (get $latest "work_description")
+                        "labor_time" (get $latest "labor_time")
+                        "notes" (get $latest "notes")
+                        "recorded_at" (get $latest "recorded_at")
+                        "parts_used" (parts-for-log (get $latest "log_id"))}))))))))
+
+(defn handle-service-logs-get [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $q (db-query "bigwash_service_logs" {"as_request_id" $id})
+            $rows (db-rows $q)]
+        (if (not (get $q "ok"))
+          (json-err 503 "database unavailable")
+          (let [$sorted (reverse (sort-by (fn [$r] (get $r "recorded_at")) $rows))
+                $mapped (map (fn [$r]
+                               {"id" (get $r "log_id")
+                                "work_description" (get $r "work_description")
+                                "labor_time" (get $r "labor_time")
+                                "notes" (get $r "notes")
+                                "recorded_at" (get $r "recorded_at")
+                                "parts_used" (parts-for-log (get $r "log_id"))})
+                             $sorted)]
+            (json-ok $mapped)))))))
+
+;; ── Billing ────────────────────────────────────────────────
+
+(defn handle-billing-post [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (get $gate "id")
+            $body (req-body $req)
+            $parts (?? (get $body "parts_cost") 0)
+            $labor (?? (get $body "labor_cost") 0)
+            $fee (?? (get $body "service_fee") 0)
+            $total (?? (get $body "total") (+ $parts (+ $labor $fee)))
+            $method (?? (get $body "payment_method") "card")
+            $status (?? (get $body "payment_status") "pending")]
+        (if (not (valid-pay-method? $method))
+          (json-err 400 "payment_method must be card|cash|transfer")
+          (if (not (valid-pay-status? $status))
+            (json-err 400 "payment_status must be pending|completed")
+            (let [$bid (str "billing-" $id)
+                  $now (iso-now)
+                  $paid (if (= $status "completed") $now "")
+                  $existing (db-get-row "bigwash_billing" $bid)
+                  $row {"billing_id" $bid
+                        "as_request_id" $id
+                        "parts_cost" $parts
+                        "labor_cost" $labor
+                        "service_fee" $fee
+                        "total_amount" $total
+                        "payment_method" $method
+                        "payment_status" $status
+                        "paid_at" $paid
+                        "notes" (?? (get $body "notes") "")
+                        "created_at" $now}
+                  $res (if (and (get $existing "ok") (not (nil? (db-row $existing))))
+                         (db-patch "bigwash_billing" $bid
+                                   {"parts_cost" $parts
+                                    "labor_cost" $labor
+                                    "service_fee" $fee
+                                    "total_amount" $total
+                                    "payment_method" $method
+                                    "payment_status" $status
+                                    "paid_at" $paid
+                                    "notes" (get $row "notes")})
+                         (db-insert "bigwash_billing" $row))]
+              (if (not (get $res "ok"))
+                (json-err 500 (?? (get $res "message") "billing save failed"))
+                (json-created {"id" $bid
+                               "total" $total
+                               "payment_method" $method
+                               "payment_status" $status})))))))))
+
+(defn handle-billing-get [$req]
+  (let [$gate (require-as-admin $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$bid (str "billing-" (get $gate "id"))
+            $q (db-get-row "bigwash_billing" $bid)
+            $row (db-row $q)]
+        (if (or (not (get $q "ok")) (nil? $row))
+          (json-ok nil)
+          (json-ok $row))))))
+
+;; ── Customer portal ────────────────────────────────────────
+
+(defn customer-photos [$as-id]
+  (let [$rows (db-rows (db-query "bigwash_photos" {"as_request_id" $as-id}))
+        $before (filter (fn [$r] (= (get $r "photo_type") "before")) $rows)
+        $after (filter (fn [$r] (= (get $r "photo_type") "after")) $rows)]
+    {"before" (map (fn [$r]
+                     {"id" (get $r "photo_id")
+                      "uploaded_at" (get $r "uploaded_at")
+                      "content_url" (str "/customer/photo/" (get $r "photo_id"))})
+                   $before)
+     "after" (map (fn [$r]
+                    {"id" (get $r "photo_id")
+                     "uploaded_at" (get $r "uploaded_at")
+                     "content_url" (str "/customer/photo/" (get $r "photo_id"))})
+                  $after)}))
+
+(defn handle-customer-requests [$req]
+  (let [$phone (?? (server-req-query $req "phone") "")]
+    (if (not (valid-phone? $phone))
+      (json-err 400 "phone query required")
+      (let [$q (db-query "bigwash_as_requests" {"customer_phone" $phone})
+            $rows (db-rows $q)]
+        (if (not (get $q "ok"))
+          (json-err 503 "database unavailable")
+          (let [$sorted (reverse (sort-by (fn [$r] (get $r "created_at")) $rows))
+                $mapped (map (fn [$r]
+                               (let [$id (get $r "as_id")
+                                     $sch (db-row (db-get-row "bigwash_schedules" (str "schedule-" $id)))
+                                     $bill (db-row (db-get-row "bigwash_billing" (str "billing-" $id)))]
+                                 {"id" $id
+                                  "receipt_no" (get $r "receipt_no")
+                                  "status" (get $r "status")
+                                  "symptom" (get $r "symptom")
+                                  "equipment_name" (get $r "equipment_name")
+                                  "created_at" (get $r "created_at")
+                                  "scheduled_date" (if (nil? $sch) "" (get $sch "scheduled_date"))
+                                  "scheduled_time" (if (nil? $sch) "" (get $sch "scheduled_time"))
+                                  "photos" (customer-photos $id)
+                                  "billing" (if (nil? $bill) nil
+                                              {"total" (get $bill "total_amount")
+                                               "payment_status" (get $bill "payment_status")
+                                               "payment_method" (get $bill "payment_method")})}))
+                             $sorted)]
+            (json-ok $mapped)))))))
+
+(defn handle-customer-photo [$req]
+  (let [$pid (server-req-param $req "photoId")
+        $q (db-get-row "bigwash_photos" $pid)
+        $row (db-row $q)]
+    (if (or (not (get $q "ok")) (nil? $row))
+      (json-err 404 "Photo not found")
+      (try
+        (let [$b64 (file-read (get $row "file_path"))
+              $mime (?? (get $row "mime") "image/jpeg")]
+          (json-ok {"id" $pid
+                    "photo_type" (get $row "photo_type")
+                    "data_url" (str "data:" $mime ";base64," $b64)}))
+        (catch $err
+          (json-err 500 (str "photo read failed: " $err)))))))
+
+(defn handle-customer-page [$req]
+  (serve-public "customer.html"))
+
+(ensure-upload-dir!)

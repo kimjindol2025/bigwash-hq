@@ -1,0 +1,405 @@
+;; bigwash-as AFJ (FreeLang v11) HTTP server
+;; Persistence: AFL-DB V2 (:40610)
+;; Core + Phase2: schedule / photos / service-log / billing / customer
+
+(define PORT (str-to-num (?? (shell_env "PORT") "3000")))
+(define ROOT (?? (shell_env "BIGWASH_AS_ROOT") "/home/kim/kim/projects/bigwash-as"))
+(define JWT_SECRET (?? (shell_env "JWT_SECRET") "bigwash-secret-key-2026"))
+(define JWT_TTL (str-to-num (?? (shell_env "JWT_TTL_SEC") "86400")))
+(define ADMIN_PHONE (?? (shell_env "ADMIN_PHONE") "031-1688-7759"))
+
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+(load "/home/kim/kim/projects/bigwash-as/src/phase2.fl")
+
+(defn json-ok [$body]
+  (server-json 200 $body))
+
+(defn json-created [$body]
+  (server-json 201 $body))
+
+(defn json-err [$status $message]
+  (server-json $status {"error" $message}))
+
+(defn req-body [$req]
+  (let [$body (get $req "body")]
+    (if (nil? $body) {} $body)))
+
+(defn bearer-token [$req]
+  (let [$hdr (?? (server-req-header $req "authorization") "")]
+    (if (str-starts-with $hdr "Bearer ")
+      (slice $hdr 7)
+      "")))
+
+(defn require-admin [$req]
+  (let [$token (bearer-token $req)]
+    (if (= $token "")
+      {"ok" false "status" 401 "error" "Missing authorization header"}
+      (try
+        (let [$payload (auth-jwt-verify $token JWT_SECRET)]
+          (if (nil? $payload)
+            {"ok" false "status" 401 "error" "Invalid token"}
+            {"ok" true "admin" $payload}))
+        (catch $err
+          {"ok" false "status" 401 "error" "Invalid token"})))))
+
+(defn valid-phone? [$phone]
+  (and (string? $phone)
+       (>= (length $phone) 10)
+       (<= (length $phone) 20)))
+
+(defn valid-status? [$status]
+  (or (= $status "received")
+      (= $status "assigned")
+      (= $status "in_progress")
+      (= $status "done")))
+
+(defn status-message [$receipt $status]
+  (cond
+    [(= $status "assigned")
+     (str "[빅워시] #" $receipt "\n담당자가 배정되었습니다.")]
+    [(= $status "in_progress")
+     (str "[빅워시] #" $receipt "\n담당자가 출동 중입니다.\n도착 예정시간 별도 안내드립니다.")]
+    [(= $status "done")
+     (str "[빅워시] #" $receipt "\nAS가 완료되었습니다.\n이용해 주셔서 감사합니다.")]
+    [true
+     (str "[빅워시] #" $receipt "\n상태: " $status)]))
+
+(defn log-notification! [$as-id $phone $content]
+  (do
+    (println (str "SMS: " $phone " - " $content))
+    (db-insert "bigwash_notifications"
+               {"notification_id" (new-id "ntf")
+                "as_request_id" $as-id
+                "customer_phone" $phone
+                "content" $content
+                "channel" "sms"
+                "status" "sent"
+                "sent_at" (iso-now)
+                "created_at" (iso-now)})))
+
+(defn serve-public [$rel]
+  (let [$path (str ROOT "/public/" $rel)]
+    (if (file-exists $path)
+      (server-html (file-read $path))
+      (json-err 404 "Not found"))))
+
+(defn handle-health [$req]
+  (json-ok {"status" "ok"
+            "service" "bigwash-as-afj"
+            "db_ready" (db-ready?)
+            "timestamp" (iso-now)}))
+
+(defn handle-login [$req]
+  (if (not (db-ready?))
+    (json-err 503 "database unavailable")
+    (let [$body (req-body $req)
+          $username (get $body "username")
+          $password (get $body "password")]
+      (if (or (nil? $username) (nil? $password) (= $username "") (= $password ""))
+        (json-err 400 "username and password required")
+        (let [$q (db-query "bigwash_admins" {"username" $username})
+              $rows (db-rows $q)]
+          (if (not (get $q "ok"))
+            (json-err 503 "database unavailable")
+            (if (= (length $rows) 0)
+              (json-err 401 "Invalid username")
+              (let [$admin (get $rows 0)
+                    $hash (get $admin "password_hash")]
+                (if (not (auth-verify-password $password $hash))
+                  (json-err 401 "Invalid password")
+                  (let [$token (auth-jwt-sign
+                                 {"admin_id" (get $admin "admin_id")
+                                  "username" $username}
+                                 JWT_SECRET
+                                 JWT_TTL)]
+                    (json-ok {"token" $token
+                              "admin_id" (get $admin "admin_id")
+                              "username" $username})))))))))))
+
+;; CRM = 세차장 고객관리 / AS = 현장 장비 점검·수리
+
+(defn sync-legacy-customer! [$crm-id $wash $phone $address $memo $now]
+  ;; as_requests.customer_id FK → bigwash_customers 를 맞추기 위한 동기화
+  (let [$existing (db-get-row "bigwash_customers" $crm-id)
+        $row (db-row $existing)]
+    (if (and (get $existing "ok") (not (nil? $row)))
+      (db-patch "bigwash_customers" $crm-id
+                {"name" $wash
+                 "phone" $phone
+                 "address" (?? $address "")
+                 "memo" (?? $memo "")
+                 "updated_at" $now})
+      (db-insert "bigwash_customers"
+                 {"customer_id" $crm-id
+                  "name" $wash
+                  "phone" $phone
+                  "address" (?? $address "")
+                  "memo" (?? $memo "")
+                  "created_at" $now
+                  "updated_at" $now}))))
+
+(defn upsert-crm! [$wash $contact $phone $address $memo]
+  (let [$q (db-query "bigwash_crm" {"phone" $phone})
+        $rows (db-rows $q)
+        $now (iso-now)
+        $memo-val (?? $memo "")
+        $contact-val (?? $contact "")]
+    (if (not (get $q "ok"))
+      {"ok" false "error" "database unavailable"}
+      (if (> (length $rows) 0)
+        (let [$existing (get $rows 0)
+              $cid (get $existing "crm_id")
+              $patch (db-patch "bigwash_crm" $cid
+                               {"wash_name" $wash
+                                "contact_name" (if (= $contact-val "") (?? (get $existing "contact_name") "") $contact-val)
+                                "address" (?? $address (?? (get $existing "address") ""))
+                                "memo" (if (= $memo-val "") (?? (get $existing "memo") "") $memo-val)
+                                "updated_at" $now})]
+          (if (get $patch "ok")
+            (do
+              (sync-legacy-customer! $cid $wash $phone $address $memo-val $now)
+              {"ok" true "crm_id" $cid "updated" true "row" (db-row (db-get-row "bigwash_crm" $cid))})
+            {"ok" false "error" (?? (get $patch "message") "crm update failed")}))
+        (let [$id (new-id "crm")
+              $row {"crm_id" $id
+                    "wash_name" $wash
+                    "contact_name" $contact-val
+                    "phone" $phone
+                    "address" (?? $address "")
+                    "memo" $memo-val
+                    "created_at" $now
+                    "updated_at" $now}
+              $ins (db-insert "bigwash_crm" $row)]
+          (if (get $ins "ok")
+            (do
+              (sync-legacy-customer! $id $wash $phone $address $memo-val $now)
+              {"ok" true "crm_id" $id "updated" false "row" $row})
+            {"ok" false "error" (?? (get $ins "message") "crm insert failed")}))))))
+
+(defn handle-customer-create [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (if (not (db-ready?))
+        (json-err 503 "database unavailable")
+        (let [$body (req-body $req)
+              $wash (?? (get $body "wash_name") (?? (get $body "name") ""))
+              $contact (?? (get $body "contact_name") "")
+              $phone (?? (get $body "phone") "")
+              $address (?? (get $body "address") "")
+              $memo (?? (get $body "memo") "")]
+          (if (or (= $wash "") (not (valid-phone? $phone)))
+            (json-err 400 "wash_name and phone are required")
+            (let [$cust (upsert-crm! $wash $contact $phone $address $memo)]
+              (if (not (get $cust "ok"))
+                (json-err 500 (?? (get $cust "error") "crm save failed"))
+                (json-created {"id" (get $cust "crm_id")
+                               "wash_name" $wash
+                               "contact_name" $contact
+                               "phone" $phone
+                               "address" $address
+                               "memo" $memo
+                               "updated" (get $cust "updated")})))))))))
+
+(defn handle-customers-list [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (let [$q (db-query-order "bigwash_crm" {} "created_at")
+            $rows (db-rows $q)]
+        (if (not (get $q "ok"))
+          (json-err 503 "database unavailable")
+          (json-ok (reverse (sort-by (fn [$r] (get $r "created_at")) $rows))))))))
+
+(defn handle-register [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (if (not (db-ready?))
+        (json-err 503 "database unavailable")
+        (let [$body (req-body $req)
+              $crm-id (?? (get $body "crm_id") "")
+              $equipment (?? (get $body "equipment_name") "")
+              $equip-status (?? (get $body "equipment_status") "")
+              $inspection (?? (get $body "inspection_note") (?? (get $body "symptom") ""))
+              $address-override (?? (get $body "address") "")]
+          (if (or (= $crm-id "") (= $inspection "") (= $equipment ""))
+            (json-err 400 "crm_id, equipment_name, inspection_note are required")
+            (let [$crmq (db-get-row "bigwash_crm" $crm-id)
+                  $crm (db-row $crmq)]
+              (if (or (not (get $crmq "ok")) (nil? $crm))
+                (json-err 404 "CRM customer not found")
+                (let [$wash (get $crm "wash_name")
+                      $phone (get $crm "phone")
+                      $address (if (= $address-override "") (?? (get $crm "address") "") $address-override)
+                      $as-id (new-id "as")
+                      $receipt (slice $as-id 0 8)
+                      $now (iso-now)
+                      $_sync (sync-legacy-customer! $crm-id $wash $phone $address (?? (get $crm "memo") "") $now)
+                      $row {"as_id" $as-id
+                            "receipt_no" $receipt
+                            "customer_id" $crm-id
+                            "customer_name" $wash
+                            "customer_phone" $phone
+                            "equipment_name" $equipment
+                            "symptom" $inspection
+                            "address" $address
+                            "status" "received"
+                            "created_at" $now
+                            "updated_at" $now
+                            "completed_at" ""
+                            "result" $equip-status}
+                      $ins (db-insert "bigwash_as_requests" $row)]
+                  (if (not (get $ins "ok"))
+                    (json-err 500 (?? (get $ins "message") "AS register failed"))
+                    (do
+                      (log-notification!
+                        $as-id $phone
+                        (str "[빅워시] 접수 #" $receipt "\n세차장: " $wash
+                             "\n장비: " $equipment "\n점검: " $inspection))
+                      (log-notification!
+                        $as-id ADMIN_PHONE
+                        (str "[빅워시 신규 AS]\n" $wash " / " $phone
+                             "\n장비: " $equipment
+                             "\n상태: " (if (= $equip-status "") "-" $equip-status)
+                             "\n점검: " $inspection))
+                      (json-created {"id" $as-id
+                                     "receipt_no" $receipt
+                                     "status" "received"
+                                     "wash_name" $wash
+                                     "equipment_name" $equipment}))))))))))))
+
+(defn as-public-row [$r]
+  (let [$id (get $r "as_id")
+        $sch (db-row (db-get-row "bigwash_schedules" (str "schedule-" $id)))
+        $bill (db-row (db-get-row "bigwash_billing" (str "billing-" $id)))
+        $sched-date (if (nil? $sch) "" (get $sch "scheduled_date"))
+        $sched-time (if (nil? $sch) "" (get $sch "scheduled_time"))
+        $tech (if (nil? $sch) "" (get $sch "technician_id"))
+        $btotal (if (nil? $bill) nil (get $bill "total_amount"))
+        $pstatus (if (nil? $bill) "" (get $bill "payment_status"))]
+    (do
+      {"id" $id
+       "receipt_no" (get $r "receipt_no")
+       "customer_name" (get $r "customer_name")
+       "customer_phone" (get $r "customer_phone")
+       "equipment_name" (get $r "equipment_name")
+       "symptom" (get $r "symptom")
+       "address" (get $r "address")
+       "status" (get $r "status")
+       "created_at" (get $r "created_at")
+       "updated_at" (get $r "updated_at")
+       "completed_at" (get $r "completed_at")
+       "result" (get $r "result")
+       "scheduled_date" $sched-date
+       "scheduled_time" $sched-time
+       "technician_id" $tech
+       "billing_total" $btotal
+       "payment_status" $pstatus})))
+
+(defn enrich-as-rows [$rows]
+  (reduce (fn [$acc $r]
+            (append $acc [(as-public-row $r)]))
+          []
+          $rows))
+
+(defn handle-list [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (if (not (db-ready?))
+        (json-err 503 "database unavailable")
+        (let [$q (db-query-order "bigwash_as_requests" {} "created_at")
+              $rows (db-rows $q)]
+          (if (not (get $q "ok"))
+            (json-err 503 "database unavailable")
+            (json-ok (enrich-as-rows (reverse (sort-by (fn [$r] (get $r "created_at")) $rows))))))))))
+
+(defn handle-get [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (let [$id (server-req-param $req "id")
+            $q (db-get-row "bigwash_as_requests" $id)
+            $row (db-row $q)]
+        (if (or (not (get $q "ok")) (nil? $row))
+          (json-err 404 "Not found")
+          (json-ok (as-public-row $row)))))))
+
+(defn handle-status [$req]
+  (let [$auth (require-admin $req)]
+    (if (not (get $auth "ok"))
+      (json-err (get $auth "status") (get $auth "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $status (get $body "status")]
+        (if (not (valid-status? $status))
+          (json-err 400 "Invalid status")
+          (let [$cur (db-get-row "bigwash_as_requests" $id)
+                $row (db-row $cur)]
+            (if (or (not (get $cur "ok")) (nil? $row))
+              (json-err 404 "Not found")
+              (let [$now (iso-now)
+                    $patch {"status" $status
+                            "updated_at" $now
+                            "completed_at" (if (= $status "done") $now (?? (get $row "completed_at") ""))}
+                    $upd (db-patch "bigwash_as_requests" $id $patch)]
+                (if (not (get $upd "ok"))
+                  (json-err 500 (?? (get $upd "message") "update failed"))
+                  (do
+                    (log-notification!
+                      $id
+                      (get $row "customer_phone")
+                      (status-message (get $row "receipt_no") $status))
+                    (json-ok {"status" $status "updated_at" $now})))))))))))
+
+(defn handle-index [$req]
+  (serve-public "login.html"))
+
+(defn handle-admin [$req]
+  (serve-public "login.html"))
+
+(defn handle-login-page [$req]
+  (serve-public "login.html"))
+
+(defn handle-dashboard [$req]
+  (serve-public "dashboard.html"))
+
+(server-get "/health" "handle-health")
+(server-post "/admin/login" "handle-login")
+(server-post "/customers" "handle-customer-create")
+(server-get "/customers" "handle-customers-list")
+(server-post "/as/register" "handle-register")
+(server-get "/as/list" "handle-list")
+(server-get "/as/:id" "handle-get")
+(server-put "/as/:id/status" "handle-status")
+
+(server-post "/as/:id/schedule" "handle-schedule-post")
+(server-get "/as/:id/schedule" "handle-schedule-get")
+(server-post "/as/:id/photo" "handle-photo-post")
+(server-get "/as/:id/photos" "handle-photos-list")
+(server-get "/as/:id/photos/:photoId/content" "handle-photo-content")
+(server-put "/as/:id/service-log" "handle-service-log-put")
+(server-get "/as/:id/service-log" "handle-service-log-get")
+(server-get "/as/:id/service-logs" "handle-service-logs-get")
+(server-post "/as/:id/billing" "handle-billing-post")
+(server-get "/as/:id/billing" "handle-billing-get")
+
+(server-get "/customer/requests" "handle-customer-requests")
+(server-get "/customer/photo/:photoId" "handle-customer-photo")
+(server-get "/customer" "handle-customer-page")
+(server-get "/customer.html" "handle-customer-page")
+
+(defn handle-register-page [$req]
+  (serve-public "register.html"))
+
+(server-get "/" "handle-index")
+(server-get "/register" "handle-register-page")
+(server-get "/register.html" "handle-register-page")
+(server-get "/admin" "handle-admin")
+(server-get "/admin/login.html" "handle-login-page")
+(server-get "/admin/dashboard.html" "handle-dashboard")
+
+(println (str "[bigwash-as] AFJ server starting on port " PORT))
+(println (str "[bigwash-as] AFLDB_URL=" AFLDB_URL " db_ready=" (db-ready?)))
+(server-start PORT)

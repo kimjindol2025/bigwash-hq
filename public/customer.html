@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>빅워시 AS - 고객 조회</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #162033;
+      --line: #243149;
+      --text: #e7eefc;
+      --muted: #8fa3c1;
+      --accent: #3de0c7;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Noto Sans KR", sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 400px at 20% 0%, rgba(61,224,199,.12), transparent 55%),
+        var(--bg);
+      padding: 24px;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 { font-size: 22px; margin-bottom: 8px; }
+    .sub { color: var(--muted); font-family: var(--mono); font-size: 12px; margin-bottom: 20px; }
+    .search {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 12px; padding: 14px; margin-bottom: 16px;
+    }
+    input {
+      flex: 1; min-width: 200px; padding: 10px 12px;
+      border-radius: 8px; border: 1px solid var(--line);
+      background: #0e1626; color: var(--text);
+    }
+    button {
+      padding: 10px 16px; border: none; border-radius: 8px;
+      background: linear-gradient(135deg, #2bd4bd, #2a9df4);
+      color: #041018; font-weight: 800; cursor: pointer;
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 12px; padding: 16px; margin-bottom: 12px;
+    }
+    .row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .muted { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+    .status {
+      padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+      border: 1px solid rgba(61,224,199,.35); color: var(--accent);
+      background: rgba(61,224,199,.12);
+    }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 8px; margin-top: 10px; }
+    .gallery img { width: 100%; border-radius: 8px; background: #0a101c; max-height: 180px; object-fit: contain; }
+    .empty { text-align: center; color: var(--muted); padding: 40px; border: 1px dashed var(--line); border-radius: 12px; }
+    a.admin { color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>빅워시 AS 고객 조회</h1>
+    <p class="sub">phone lookup · customer portal</p>
+    <div class="search">
+      <input id="phone" type="tel" placeholder="010-1234-5678" />
+      <button type="button" onclick="lookup()">조회</button>
+      <button type="button" onclick="location.href='/register.html'" style="background:transparent;color:var(--accent);border:1px solid rgba(61,224,199,.4);">신규 접수</button>
+    </div>
+    <div id="list" class="empty">전화번호를 입력해 조회하세요.</div>
+    <p style="margin-top:16px">
+      <a class="admin" href="/register.html">온라인 접수</a> ·
+      <a class="admin" href="/admin/login.html">관리자 로그인</a>
+    </p>
+  </div>
+  <script>
+    const labels = { received: '신규', assigned: '배정', in_progress: '진행중', done: '완료' };
+
+    async function lookup() {
+      const phone = document.getElementById('phone').value.trim();
+      const list = document.getElementById('list');
+      list.innerHTML = '<div class="empty">조회 중…</div>';
+      try {
+        const res = await fetch('/customer/requests?phone=' + encodeURIComponent(phone));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '조회 실패');
+        if (!data.length) {
+          list.innerHTML = '<div class="empty">접수 내역이 없습니다.</div>';
+          return;
+        }
+        const html = [];
+        for (const r of data) {
+          const photos = [];
+          const all = [...(r.photos?.before || []), ...(r.photos?.after || [])];
+          for (const p of all) {
+            try {
+              const c = await fetch(p.content_url).then(x => x.json());
+              photos.push(`<div><div class="muted">${p.photo_type || ''}</div><img src="${c.data_url || ''}" alt="" /></div>`);
+            } catch (_) {}
+          }
+          const bill = r.billing
+            ? `<div class="muted">청구 ${r.billing.total} · ${r.billing.payment_status} · ${r.billing.payment_method || ''}</div>`
+            : '';
+          html.push(`
+            <div class="card">
+              <div class="row">
+                <div>
+                  <strong>#${r.receipt_no || r.id?.slice(0,8)}</strong>
+                  <div class="muted">${r.created_at || ''}</div>
+                </div>
+                <span class="status">${labels[r.status] || r.status}</span>
+              </div>
+              <div>${r.symptom || ''}</div>
+              <div class="muted">${r.equipment_name || ''} ${r.scheduled_date ? '· 방문 ' + r.scheduled_date + ' ' + (r.scheduled_time || '') : ''}</div>
+              ${bill}
+              ${photos.length ? `<div class="gallery">${photos.join('')}</div>` : ''}
+            </div>`);
+        }
+        list.innerHTML = html.join('');
+      } catch (e) {
+        list.innerHTML = `<div class="empty">${e.message}</div>`;
+      }
+    }
+
+    document.getElementById('phone').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') lookup();
+    });
+  </script>
+</body>
+</html>

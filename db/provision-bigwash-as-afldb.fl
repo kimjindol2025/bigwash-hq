@@ -1,0 +1,57 @@
+;; Provision bigwash-as tables on AFL-DB and seed default admin.
+;; Requires: AFLDB_URL, AFLDB_ADMIN_KEY, AFLDB_WRITE_KEY
+;; Optional: ADMIN_PASSWORD (default admin123)
+
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+
+(define SCHEMA_PATH "/home/kim/kim/projects/bigwash-as/db/bigwash-as-afldb-schema.v1.json")
+(define ADMIN_PASSWORD (?? (shell_env "ADMIN_PASSWORD") "admin123"))
+
+(defn provision-table [$table]
+  (let [$response (db-create-table $table)
+        $name (get $table "name")
+        $status (get $response "status")]
+    (if (or (= $status 200) (= $status 201) (= $status 409))
+      (println (str "[bigwash-as-db] table ready=" $name " status=" $status))
+      (println (str "[bigwash-as-db] ERROR table=" $name
+                    " status=" $status
+                    " error=" (?? (get $response "error") "")
+                    " message=" (?? (get $response "message") ""))))))
+
+(defn seed-admin []
+  (let [$existing (db-query "bigwash_admins" {"username" "admin"})
+        $rows (db-rows $existing)]
+    (if (> (length $rows) 0)
+      (println "[bigwash-as-db] admin already exists; skip seed")
+      (let [$now (iso-now)
+            $hash (auth-hash-password ADMIN_PASSWORD)
+            $row {"admin_id" "admin-001"
+                  "username" "admin"
+                  "password_hash" $hash
+                  "phone" (?? (shell_env "ADMIN_PHONE") "031-1688-7759")
+                  "created_at" $now
+                  "updated_at" $now}
+            $ins (db-insert "bigwash_admins" $row)]
+        (if (get $ins "ok")
+          (println "[bigwash-as-db] seeded admin username=admin")
+          (println (str "[bigwash-as-db] ERROR seed admin status="
+                        (get $ins "status")
+                        " error=" (?? (get $ins "error") "")
+                        " message=" (?? (get $ins "message") ""))))))))
+
+(if (or (= AFLDB_URL "") (= AFLDB_ADMIN_KEY "") (= AFLDB_WRITE_KEY ""))
+  (println "[bigwash-as-db] ERROR: AFLDB_URL, AFLDB_ADMIN_KEY, AFLDB_WRITE_KEY required")
+  (let [$schema (json-parse (file-read SCHEMA_PATH))]
+    (do
+      (println (str "[bigwash-as-db] provisioning " (get $schema "database_id")
+                    " " (get $schema "version")))
+      ;; AFJ: (map f coll) 안에서 http_request 응답 body가 비는 사례가 있어
+      ;; 테이블 생성은 reduce로 순차 실행한다.
+      (reduce (fn [$acc $table]
+                (do
+                  (provision-table $table)
+                  (append $acc [true])))
+              []
+              (get $schema "tables"))
+      (seed-admin)
+      (println "[bigwash-as-db] complete"))))

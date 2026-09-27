@@ -1,52 +1,87 @@
-;; bigwash-as/src/db.fl
-;; v1.0 / 2026-04-09
-;; PostgreSQL 래퍼
+;; bigwash-as AFL-DB client helpers (AFJ / FreeLang v11)
+;; Persistence: HTTP AFL-DB V2 relational API on :40610
 
-(defmodule db
-  (:use fl-core fl-data)
-  (:export [query execute insert-one update-one delete-one]))
+(define AFLDB_URL (?? (shell_env "AFLDB_URL") "http://127.0.0.1:40610"))
+(define AFLDB_READ_KEY (?? (shell_env "AFLDB_READ_KEY") ""))
+(define AFLDB_WRITE_KEY (?? (shell_env "AFLDB_WRITE_KEY") ""))
+(define AFLDB_ADMIN_KEY (?? (shell_env "AFLDB_ADMIN_KEY") ""))
 
-(defn query [sql params]
-  "Execute SELECT query and return results"
+(defn db-ready? []
+  (and (not (= AFLDB_URL ""))
+       (not (= AFLDB_READ_KEY ""))
+       (not (= AFLDB_WRITE_KEY ""))))
+
+(defn db-headers [$key]
+  {"content-type" "application/json" "x-api-key" $key})
+
+(defn db-parse [$response]
   (try
-    (let [result (pg/query *db-conn* sql params)]
-      {:ok result})
-    (catch [e]
-      {:error (str "Query failed: " (e :message))})))
+    (let [$payload (json-parse (?? (get $response "body") "{}"))]
+      {"status" (get $response "status")
+       "ok" (and (or (= (get $response "status") 200) (= (get $response "status") 201))
+                 (= (get $payload "ok") true))
+       "payload" $payload
+       "data" (get $payload "data")
+       "error" (get $payload "error")
+       "message" (get $payload "message")})
+    (catch $err
+      {"status" (get $response "status")
+       "ok" false
+       "payload" nil
+       "data" nil
+       "error" "parse_error"
+       "message" (str $err)})))
 
-(defn execute [sql params]
-  "Execute INSERT/UPDATE/DELETE and return affected rows"
+(defn db-request [$method $path $key $body]
   (try
-    (let [result (pg/execute *db-conn* sql params)]
-      {:ok (result :rowCount)})
-    (catch [e]
-      {:error (str "Execute failed: " (e :message))})))
+    (db-parse
+      (http_request $method
+                    (str AFLDB_URL $path)
+                    (db-headers $key)
+                    (if (nil? $body) "" (json-stringify $body))))
+    (catch $err
+      {"status" 0
+       "ok" false
+       "payload" nil
+       "data" nil
+       "error" "transport_error"
+       "message" (str $err)})))
 
-(defn insert-one [table data]
-  "Insert one record and return ID"
-  (try
-    (let [keys (keys data)
-          values (map #(data %) keys)
-          placeholders (str-join "," (map #(str "$" (+ (idx %) 1)) (range (len keys))))
-          sql (str "INSERT INTO " table " (" (str-join "," keys) ") VALUES (" placeholders ") RETURNING id")]
-      (let [result (pg/query *db-conn* sql values)]
-        (if (empty? result)
-          {:error "Insert failed"}
-          {:ok ((first result) :id)})))
-    (catch [e]
-      {:error (str "Insert failed: " (e :message))})))
+(defn db-query [$table $where]
+  (db-request "POST" "/v2/query" AFLDB_READ_KEY
+              {"table" $table "where" (?? $where {}) "limit" 100}))
 
-(defn update-one [table id data]
-  "Update one record by ID"
-  (try
-    (let [keys (keys data)
-          values (concat (map #(data %) keys) [id])
-          set-clause (str-join "," (map #(str % "=$" (+ (idx %) 1)) keys))
-          sql (str "UPDATE " table " SET " set-clause " WHERE id=$" (+ (len keys) 1))]
-      (execute sql values))
-    (catch [e]
-      {:error (str "Update failed: " (e :message))})))
+(defn db-query-order [$table $where $order-by]
+  (db-request "POST" "/v2/query" AFLDB_READ_KEY
+              {"table" $table
+               "where" (?? $where {})
+               "order_by" $order-by
+               "limit" 100}))
 
-(defn delete-one [table id]
-  "Delete one record by ID"
-  (execute (str "DELETE FROM " table " WHERE id=$1") [id]))
+(defn db-get-row [$table $id]
+  (db-request "GET" (str "/v2/tables/" $table "/rows/" $id) AFLDB_READ_KEY nil))
+
+(defn db-insert [$table $row]
+  (db-request "POST" (str "/v2/tables/" $table "/rows") AFLDB_WRITE_KEY $row))
+
+(defn db-patch [$table $id $patch]
+  (db-request "PATCH" (str "/v2/tables/" $table "/rows/" $id) AFLDB_WRITE_KEY $patch))
+
+(defn db-create-table [$table]
+  (db-request "POST" "/v2/tables" AFLDB_ADMIN_KEY $table))
+
+(defn db-rows [$result]
+  (if (not (get $result "ok"))
+    []
+    (?? (get (get $result "data") "rows") [])))
+
+(defn db-row [$result]
+  (if (not (get $result "ok"))
+    nil
+    (get (get $result "data") "row")))
+
+(defn iso-now []
+  (now-iso))
+
+(defn new-id [$prefix]
+  (str $prefix "-" (uuid_v4)))

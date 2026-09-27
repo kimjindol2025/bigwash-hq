@@ -1,0 +1,389 @@
+;; HQ 확장 모듈 — 권역/몰/명세/정산/보고 (지시서 §9–17)
+;; hq-server.fl 에서 load
+
+(defn handle-regions-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok (db-rows (db-query "hq_regions" {"company_id" (cid $gate)}))))))
+
+(defn handle-region-upsert [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $id (?? (get $body "region_id") (new-id "reg"))
+            $now (iso-now)
+            $existing (db-row (db-get-row "hq_regions" $id))
+            $row {"region_id" $id
+                  "company_id" (cid $gate)
+                  "metro" (?? (get $body "metro") "")
+                  "detail" (?? (get $body "detail") "")
+                  "name" (?? (get $body "name") "")
+                  "travel_fee" (?? (get $body "travel_fee") 0)
+                  "status" (?? (get $body "status") "active")
+                  "created_at" (if (nil? $existing) $now (?? (get $existing "created_at") $now))
+                  "updated_at" $now}]
+        (if (= (get $row "name") "")
+          (json-err 400 "name required")
+          (if (nil? $existing)
+            (do (db-insert "hq_regions" $row) (json-created $row))
+            (do (db-patch "hq_regions" $id
+                          {"metro" (get $row "metro")
+                           "detail" (get $row "detail")
+                           "name" (get $row "name")
+                           "travel_fee" (get $row "travel_fee")
+                           "status" (get $row "status")
+                           "updated_at" $now})
+                (json-ok $row))))))))
+
+(defn region-fee [$region-id]
+  (let [$r (db-row (db-get-row "hq_regions" $region-id))]
+    (if (nil? $r) 0 (?? (get $r "travel_fee") 0))))
+
+(defn handle-products-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok (db-rows (db-query "hq_products" {"company_id" (cid $gate)}))))))
+
+(defn handle-product-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $name (?? (get $body "name") "")
+            $price (?? (get $body "sale_price") 0)]
+        (if (= $name "")
+          (json-err 400 "name required")
+          (let [$id (new-id "prd")
+                $now (iso-now)
+                $row {"product_id" $id
+                      "company_id" (cid $gate)
+                      "name" $name
+                      "category" (?? (get $body "category") "부품")
+                      "spec" (?? (get $body "spec") "")
+                      "sku" (?? (get $body "sku") "")
+                      "sale_price" $price
+                      "cost_price" (?? (get $body "cost_price") 0)
+                      "unit" (?? (get $body "unit") "EA")
+                      "status" (?? (get $body "status") "active")
+                      "description" (?? (get $body "description") "")
+                      "created_at" $now
+                      "updated_at" $now}]
+            (if (not (get (db-insert "hq_products" $row) "ok"))
+              (json-err 500 "product create failed")
+              (json-created $row))))))))
+
+(defn finance-get [$ticket-id]
+  (let [$f (db-row (db-get-row "hq_ticket_finance" $ticket-id))]
+    (if (nil? $f)
+      {"ticket_id" $ticket-id
+       "ticket_type" "dispatch"
+       "region_id" ""
+       "travel_fee" 0
+       "settlement_status" ""
+       "settlement_paid" 0
+       "settlement_method" ""
+       "work_log" ""
+       "doc_ready" "false"}
+      $f)))
+
+(defn finance-upsert! [$company $ticket-id $patch]
+  (let [$cur (db-row (db-get-row "hq_ticket_finance" $ticket-id))
+        $now (iso-now)
+        $base (if (nil? $cur)
+                {"ticket_id" $ticket-id
+                 "company_id" $company
+                 "ticket_type" "dispatch"
+                 "region_id" ""
+                 "travel_fee" 0
+                 "settlement_status" ""
+                 "settlement_paid" 0
+                 "settlement_method" ""
+                 "work_log" ""
+                 "doc_ready" "false"
+                 "updated_at" $now}
+                $cur)
+        $merged (assoc (assoc (assoc (assoc (assoc $base
+                                                   "region_id" (?? (get $patch "region_id") (get $base "region_id")))
+                                            "travel_fee" (?? (get $patch "travel_fee") (get $base "travel_fee")))
+                                     "ticket_type" (?? (get $patch "ticket_type") (get $base "ticket_type")))
+                              "settlement_status" (?? (get $patch "settlement_status") (get $base "settlement_status")))
+                       "updated_at" $now)
+        $merged2 (assoc (assoc (assoc $merged
+                                      "settlement_paid" (?? (get $patch "settlement_paid") (get $base "settlement_paid")))
+                               "settlement_method" (?? (get $patch "settlement_method") (get $base "settlement_method")))
+                        "work_log" (?? (get $patch "work_log") (get $base "work_log")))
+        $merged3 (assoc $merged2 "doc_ready" (?? (get $patch "doc_ready") (get $base "doc_ready")))]
+    (if (nil? $cur)
+      (db-insert "hq_ticket_finance" $merged3)
+      (db-patch "hq_ticket_finance" $ticket-id $merged3))
+    $merged3))
+
+(defn handle-ticket-finance-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok (finance-get (server-req-param $req "id"))))))
+
+(defn handle-ticket-finance-set [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $region (?? (get $body "region_id") "")
+            $fee (if (not (= $region ""))
+                   (region-fee $region)
+                   (?? (get $body "travel_fee") 0))
+            $patch (assoc (assoc $body "region_id" $region) "travel_fee" $fee)
+            $row (finance-upsert! (cid $gate) $id $patch)]
+        (add-event! (cid $gate) $id (uid $gate) "finance" "" "" (str "권역/정산 갱신 fee=" $fee))
+        (json-ok $row)))))
+
+(defn handle-doc-issue [$req]
+  ;; 직원발행 가정 — 본사가 티켓에 명세 생성·보관
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $tid (?? (get $body "ticket_id") "")
+            $dtype (?? (get $body "doc_type") "invoice")
+            $t (db-row (db-get-row "hq_tickets" $tid))
+            $fin (finance-get $tid)]
+        (if (nil? $t)
+          (json-err 404 "ticket not found")
+          (let [$lines (?? (get $body "lines") [])
+                $labor (?? (get $body "labor_fee") 0)
+                $travel (?? (get $fin "travel_fee") 0)
+                $parts-sum (reduce (fn [$a $l] (+ $a (* (?? (get $l "qty") 1) (?? (get $l "price") 0)))) 0 $lines)
+                $bill (?? (get $body "bill_type") (?? (get $t "bill_type") "paid"))
+                $total (if (= $bill "warranty") 0 (+ $parts-sum (+ $labor $travel)))
+                $id (new-id "doc")
+                $num (str (if (= $dtype "quote") "QT-" "IV-") (slice (iso-now) 0 10) "-" (slice (uuid_v4) 0 4))
+                $now (iso-now)
+                $c (db-row (db-get-row "hq_customers" (get $t "customer_id")))
+                $eq (db-row (db-get-row "hq_equipment" (get $t "equipment_id")))
+                $body-text (str
+                             "문서:" $num "\n"
+                             "유형:" $dtype "\n"
+                             "고객:" (?? (get $c "display_name") "") "\n"
+                             "장비:" (?? (get $eq "name") "") "\n"
+                             "출장비:" $travel "\n"
+                             "공임:" $labor "\n"
+                             "부품합:" $parts-sum "\n"
+                             "합계:" $total "\n"
+                             "유상무상:" $bill "\n"
+                             "라인:" (json-stringify $lines))
+                $row {"doc_id" $id
+                      "company_id" (cid $gate)
+                      "ticket_id" $tid
+                      "customer_id" (get $t "customer_id")
+                      "doc_type" $dtype
+                      "number" $num
+                      "issued_at" $now
+                      "total" $total
+                      "bill_type" $bill
+                      "travel_fee" $travel
+                      "labor_fee" $labor
+                      "lines_json" (json-stringify $lines)
+                      "memo" (?? (get $body "memo") "")
+                      "status" "issued"
+                      "body_text" $body-text
+                      "created_at" $now}]
+            (do
+              (db-insert "hq_documents" $row)
+              (finance-upsert! (cid $gate) $tid {"doc_ready" "true"})
+              (json-created $row))))))))
+
+(defn handle-docs-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tid (?? (server-req-query $req "ticket_id") "")
+            $rows (if (= $tid "")
+                    (db-rows (db-query "hq_documents" {"company_id" (cid $gate)}))
+                    (db-rows (db-query "hq_documents" {"company_id" (cid $gate) "ticket_id" $tid})))]
+        (json-ok $rows)))))
+
+(defn handle-doc-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$d (db-row (db-get-row "hq_documents" (server-req-param $req "id")))]
+        (if (or (nil? $d) (not (= (get $d "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (json-ok $d))))))
+
+(defn handle-doc-download [$req]
+  ;; 1차: text/plain 본문 (PDF/이미지 바이너리 생성은 후속 — 동일 레이아웃 텍스트 제공)
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$d (db-row (db-get-row "hq_documents" (server-req-param $req "id")))
+            $fmt (?? (server-req-query $req "format") "text")]
+        (if (nil? $d)
+          (json-err 404 "Not found")
+          (json-ok {"doc_id" (get $d "doc_id")
+                    "number" (get $d "number")
+                    "format" $fmt
+                    "title" (if (= (get $d "doc_type") "quote") "견적서" "거래명세서")
+                    "content" (get $d "body_text")
+                    "total" (get $d "total")
+                    "download_hint" "1차 text 본문. PDF/이미지 렌더는 동일 레이아웃 후속."}))))))
+
+(defn handle-expenses-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok (db-rows (db-query "hq_expenses" {"company_id" (cid $gate)}))))))
+
+(defn handle-expense-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $row {"expense_id" (new-id "exp")
+                  "company_id" (cid $gate)
+                  "user_id" (?? (get $body "user_id") (uid $gate))
+                  "amount" (?? (get $body "amount") 0)
+                  "category" (?? (get $body "category") "기타")
+                  "memo" (?? (get $body "memo") "")
+                  "receipt_note" (?? (get $body "receipt_note") "")
+                  "status" "pending"
+                  "created_at" (iso-now)
+                  "decided_at" ""}]
+        (db-insert "hq_expenses" $row)
+        (json-created $row)))))
+
+(defn handle-expense-decide [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $st (?? (get (req-body $req) "status") "")
+            $e (db-row (db-get-row "hq_expenses" $id))]
+        (if (nil? $e)
+          (json-err 404 "Not found")
+          (if (and (not (= $st "approved")) (not (= $st "rejected")))
+            (json-err 400 "status approved|rejected")
+            (do
+              (db-patch "hq_expenses" $id {"status" $st "decided_at" (iso-now)})
+              (json-ok {"expense_id" $id "status" $st}))))))))
+
+(defn handle-payroll-upsert [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $uid (?? (get $body "user_id") "")
+            $ym (?? (get $body "year_month") "")
+            $base (?? (get $body "base_pay") 0)
+            $allow (?? (get $body "allowances") 0)
+            $ded (?? (get $body "deductions") 0)
+            $total (+ $base (- $allow $ded))]
+        (if (or (= $uid "") (= $ym ""))
+          (json-err 400 "user_id and year_month required")
+          (let [$id (str "pay-" $uid "-" $ym)
+                $existing (db-row (db-get-row "hq_payroll" $id))
+                $row {"payroll_id" $id
+                      "company_id" (cid $gate)
+                      "user_id" $uid
+                      "year_month" $ym
+                      "base_pay" $base
+                      "allowances" $allow
+                      "deductions" $ded
+                      "total" $total
+                      "note" (?? (get $body "note") "")
+                      "created_at" (iso-now)}]
+            (if (nil? $existing)
+              (do (db-insert "hq_payroll" $row) (json-created $row))
+              (do (db-patch "hq_payroll" $id
+                            {"base_pay" $base "allowances" $allow "deductions" $ded "total" $total
+                             "note" (get $row "note")})
+                  (json-ok (assoc $row "total" $total))))))))))
+
+(defn handle-payroll-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$ym (?? (server-req-query $req "year_month") "")
+            $rows (db-rows (db-query "hq_payroll" {"company_id" (cid $gate)}))
+            $filtered (if (= $ym "") $rows (filter (fn [$r] (= (get $r "year_month") $ym)) $rows))]
+        (json-ok $filtered)))))
+
+(defn handle-opex-create [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $row {"opex_id" (new-id "opx")
+                  "company_id" (cid $gate)
+                  "year_month" (?? (get $body "year_month") (slice (iso-now) 0 7))
+                  "category" (?? (get $body "category") "기타")
+                  "amount" (?? (get $body "amount") 0)
+                  "memo" (?? (get $body "memo") "")
+                  "created_at" (iso-now)}]
+        (db-insert "hq_opex" $row)
+        (json-created $row)))))
+
+(defn handle-opex-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (json-ok (db-rows (db-query "hq_opex" {"company_id" (cid $gate)}))))))
+
+(defn handle-unpaid-list [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$fins (db-rows (db-query "hq_ticket_finance" {"company_id" (cid $gate)}))
+            $unpaid (filter (fn [$f]
+                              (or (= (get $f "settlement_status") "미수")
+                                  (= (get $f "settlement_status") "부분수금")))
+                            $fins)]
+        (json-ok $unpaid)))))
+
+(defn handle-report [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$kind (?? (server-req-query $req "kind") "daily")
+            $company (cid $gate)
+            $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
+            $calls (db-rows (db-query "hq_call_logs" {"company_id" $company}))
+            $pays (db-rows (db-query "hq_payroll" {"company_id" $company}))
+            $exps (db-rows (db-query "hq_expenses" {"company_id" $company}))
+            $opex (db-rows (db-query "hq_opex" {"company_id" $company}))
+            $fins (db-rows (db-query "hq_ticket_finance" {"company_id" $company}))
+            $today (slice (iso-now) 0 10)
+            $ym (slice (iso-now) 0 7)
+            $csv (cond
+                   [(= $kind "daily")
+                    (str "date,calls,tickets,done\n"
+                         $today ","
+                         (length (filter (fn [$c] (str-starts-with (?? (get $c "created_at") "") $today)) $calls)) ","
+                         (length (filter (fn [$t] (str-starts-with (?? (get $t "created_at") "") $today)) $tickets)) ","
+                         (length (filter (fn [$t] (str-starts-with (?? (get $t "completed_at") "") $today)) $tickets))
+                         "\n")]
+                   [(= $kind "weekly")
+                    (str "assignee,open,done\n"
+                         (reduce (fn [$a $t]
+                                   (str $a (?? (get $t "assignee_id") "none") "," (get $t "status") "," (get $t "number") "\n"))
+                                 ""
+                                 $tickets))]
+                   [true
+                    (str "year_month,payroll_total,opex_total,expense_approved,tickets,repeats\n"
+                         $ym ","
+                         (reduce (fn [$a $p] (+ $a (?? (get $p "total") 0))) 0
+                                 (filter (fn [$p] (= (get $p "year_month") $ym)) $pays)) ","
+                         (reduce (fn [$a $o] (+ $a (?? (get $o "amount") 0))) 0
+                                 (filter (fn [$o] (= (get $o "year_month") $ym)) $opex)) ","
+                         (reduce (fn [$a $e] (+ $a (?? (get $e "amount") 0))) 0
+                                 (filter (fn [$e] (and (= (get $e "status") "approved")
+                                                       (str-starts-with (?? (get $e "created_at") "") $ym))) $exps)) ","
+                         (length $tickets) ","
+                         (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
+                         "\n")])]
+        (json-ok {"kind" $kind "csv" $csv "format" "excel-csv"})))))

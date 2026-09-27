@@ -1,0 +1,150 @@
+{
+  "schema": "bigwash-as",
+  "version": "v2",
+  "database_id": "bigwash-as",
+  "engine": "AFL-DB V2 relational API",
+  "tables": [
+    {
+      "name": "bigwash_admins",
+      "primary_key": "admin_id",
+      "columns": [
+        {"name": "admin_id", "type": "string"},
+        {"name": "username", "type": "string", "required": true, "unique": true, "indexed": true},
+        {"name": "password_hash", "type": "string", "required": true},
+        {"name": "phone", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "bigwash_customers",
+      "primary_key": "customer_id",
+      "columns": [
+        {"name": "customer_id", "type": "string"},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "phone", "type": "string", "required": true, "unique": true, "indexed": true},
+        {"name": "address", "type": "string"},
+        {"name": "memo", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "bigwash_crm",
+      "primary_key": "crm_id",
+      "columns": [
+        {"name": "crm_id", "type": "string"},
+        {"name": "wash_name", "type": "string", "required": true, "indexed": true},
+        {"name": "contact_name", "type": "string"},
+        {"name": "phone", "type": "string", "required": true, "unique": true, "indexed": true},
+        {"name": "address", "type": "string"},
+        {"name": "memo", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "bigwash_as_requests",
+      "primary_key": "as_id",
+      "columns": [
+        {"name": "as_id", "type": "string"},
+        {"name": "receipt_no", "type": "string", "required": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "indexed": true, "ref": {"table": "bigwash_customers", "column": "customer_id"}},
+        {"name": "customer_name", "type": "string", "required": true},
+        {"name": "customer_phone", "type": "string", "required": true, "indexed": true},
+        {"name": "equipment_name", "type": "string"},
+        {"name": "symptom", "type": "string", "required": true},
+        {"name": "address", "type": "string"},
+        {"name": "status", "type": "string", "required": true, "indexed": true},
+        {"name": "created_at", "type": "string", "required": true, "indexed": true},
+        {"name": "updated_at", "type": "string", "required": true},
+        {"name": "completed_at", "type": "string"},
+        {"name": "result", "type": "string"}
+      ]
+    },
+    {
+      "name": "bigwash_notifications",
+      "primary_key": "notification_id",
+      "columns": [
+        {"name": "notification_id", "type": "string"},
+        {"name": "as_request_id", "type": "string", "indexed": true, "ref": {"table": "bigwash_as_requests", "column": "as_id"}},
+        {"name": "customer_phone", "type": "string", "required": true},
+        {"name": "content", "type": "string", "required": true},
+        {"name": "channel", "type": "string", "required": true},
+        {"name": "status", "type": "string", "required": true, "indexed": true},
+        {"name": "sent_at", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "bigwash_schedules",
+      "primary_key": "schedule_id",
+      "columns": [
+        {"name": "schedule_id", "type": "string"},
+        {"name": "as_request_id", "type": "string", "required": true, "unique": true, "indexed": true, "ref": {"table": "bigwash_as_requests", "column": "as_id"}},
+        {"name": "scheduled_date", "type": "string", "required": true, "indexed": true},
+        {"name": "scheduled_time", "type": "string", "required": true},
+        {"name": "technician_id", "type": "string"},
+        {"name": "address", "type": "string"},
+        {"name": "notes", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true},
+        {"name": "updated_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "bigwash_photos",
+      "primary_key": "photo_id",
+      "columns": [
+        {"name": "photo_id", "type": "string"},
+        {"name": "as_request_id", "type": "string", "required": true, "indexed": true, "ref": {"table": "bigwash_as_requests", "column": "as_id"}},
+        {"name": "photo_type", "type": "string", "required": true, "indexed": true},
+        {"name": "file_path", "type": "string", "required": true},
+        {"name": "mime", "type": "string"},
+        {"name": "original_name", "type": "string"},
+        {"name": "file_size", "type": "number"},
+        {"name": "uploaded_at", "type": "string", "required": true, "indexed": true}
+      ]
+    },
+    {
+      "name": "bigwash_service_logs",
+      "primary_key": "log_id",
+      "columns": [
+        {"name": "log_id", "type": "string"},
+        {"name": "as_request_id", "type": "string", "required": true, "indexed": true, "ref": {"table": "bigwash_as_requests", "column": "as_id"}},
+        {"name": "work_description", "type": "string", "required": true},
+        {"name": "labor_time", "type": "number"},
+        {"name": "notes", "type": "string"},
+        {"name": "recorded_at", "type": "string", "required": true, "indexed": true}
+      ]
+    },
+    {
+      "name": "bigwash_parts",
+      "primary_key": "part_id",
+      "columns": [
+        {"name": "part_id", "type": "string"},
+        {"name": "service_log_id", "type": "string", "required": true, "indexed": true, "ref": {"table": "bigwash_service_logs", "column": "log_id"}},
+        {"name": "part_name", "type": "string", "required": true},
+        {"name": "quantity", "type": "number"},
+        {"name": "unit_price", "type": "number"},
+        {"name": "total_price", "type": "number"}
+      ]
+    },
+    {
+      "name": "bigwash_billing",
+      "primary_key": "billing_id",
+      "columns": [
+        {"name": "billing_id", "type": "string"},
+        {"name": "as_request_id", "type": "string", "required": true, "unique": true, "indexed": true, "ref": {"table": "bigwash_as_requests", "column": "as_id"}},
+        {"name": "parts_cost", "type": "number"},
+        {"name": "labor_cost", "type": "number"},
+        {"name": "service_fee", "type": "number"},
+        {"name": "total_amount", "type": "number", "required": true},
+        {"name": "payment_method", "type": "string"},
+        {"name": "payment_status", "type": "string", "required": true, "indexed": true},
+        {"name": "paid_at", "type": "string"},
+        {"name": "notes", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    }
+  ]
+}

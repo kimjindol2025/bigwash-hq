@@ -1,18 +1,21 @@
 {
   "name": "bigwash-as",
-  "version": "1.0.0",
-  "description": "빅워시 AS 접수 자동화 시스템",
-  "main": "core/server.fl",
+  "version": "2.0.0-afj",
+  "description": "빅워시 AS 접수 자동화 시스템 (FreeLang AFJ + AFL-DB)",
+  "main": "src/server.fl",
   "scripts": {
-    "build": "fl-compiler build core/server.fl -o dist/server.js",
-    "dev": "node server.js",
-    "start": "node server.js",
-    "migrate": "node scripts/migrate.js",
-    "test": "node tests/run.js",
-    "test:integration": "node tests/integration.js",
-    "test:e2e": "node tests/e2e.js",
-    "test:all": "npm run test && npm run test:integration && npm run test:e2e",
-    "deploy": "bash scripts/deploy.sh"
+    "provision": "bash scripts/provision-hq.sh",
+    "provision:legacy": "bash scripts/provision-afldb.sh",
+    "start": "bash scripts/run-afj.sh",
+    "dev": "bash scripts/run-afj.sh",
+    "deploy": "bash scripts/deploy.sh",
+    "test:phase2": "bash tests/phase2-smoke.sh",
+    "test:hq": "bash tests/hq-acceptance.sh",
+    "test:hq19": "bash tests/hq-spec19-acceptance.sh",
+    "start:legacy-node": "node server.js",
+    "test:legacy": "node tests/run.js",
+    "test:legacy:integration": "node tests/integration.js",
+    "test:legacy:e2e": "node tests/e2e.js"
   },
   "dependencies": {
     "express": "^4.18.0",
@@ -23,6 +26,6 @@
   "devDependencies": {
     "jest": "^29.0.0"
   },
-  "author": "Claude Code",
+  "author": "Claude Code / Grok",
   "license": "MIT"
 }

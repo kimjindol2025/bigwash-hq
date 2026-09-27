@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>빅워시 HQ - 본사 콘솔</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-elev: #121a2b;
+      --bg-card: #162033;
+      --line: #243149;
+      --text: #e7eefc;
+      --muted: #8fa3c1;
+      --accent: #3de0c7;
+      --accent-dim: rgba(61, 224, 199, 0.15);
+      --warn: #ffb020;
+      --danger: #ff6b7a;
+      --info: #5b8cff;
+      --ok: #3ddc97;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Noto Sans KR", sans-serif;
+      --nav-w: 220px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(61, 224, 199, 0.1), transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, rgba(91, 140, 255, 0.1), transparent 50%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+    }
+    .sidebar {
+      width: var(--nav-w);
+      flex-shrink: 0;
+      background: linear-gradient(180deg, rgba(18, 26, 43, 0.98), rgba(11, 18, 32, 0.96));
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .brand {
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand .mark {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: grid; place-items: center;
+      background: rgba(61, 224, 199, 0.12);
+      border: 1px solid rgba(61, 224, 199, 0.35);
+      color: var(--accent); font-weight: 800; font-family: var(--mono); font-size: 12px;
+      margin-bottom: 10px;
+    }
+    .brand h1 { font-size: 16px; letter-spacing: 0.02em; }
+    .brand p { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; flex: 1; overflow-y: auto; }
+    .nav button {
+      text-align: left; padding: 10px 12px; border: 1px solid transparent;
+      background: transparent; color: var(--muted); border-radius: 10px;
+      cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.15s;
+    }
+    .nav button:hover { color: var(--text); background: rgba(255,255,255,0.03); border-color: var(--line); }
+    .nav button.active {
+      color: var(--accent); background: var(--accent-dim);
+      border-color: rgba(61, 224, 199, 0.35);
+    }
+    .user-box {
+      padding: 14px 16px; border-top: 1px solid var(--line);
+      font-size: 12px; color: var(--muted);
+    }
+    .user-box .name { color: var(--text); font-weight: 700; margin-bottom: 4px; }
+    .user-box .role { font-family: var(--mono); font-size: 11px; margin-bottom: 10px; }
+    .logout-btn {
+      width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+      background: transparent; color: var(--text); cursor: pointer; font-size: 12px;
+    }
+    .logout-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(255,107,122,0.08); }
+
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      padding: 16px 24px; border-bottom: 1px solid var(--line);
+      background: rgba(18, 26, 43, 0.7); backdrop-filter: blur(8px);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .topbar h2 { font-size: 18px; letter-spacing: 0.02em; }
+    .topbar .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .content { padding: 20px 24px 48px; flex: 1; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .stat {
+      background: var(--bg-card); border: 1px solid var(--line);
+      padding: 14px 12px; border-radius: 12px; position: relative; overflow: hidden;
+      cursor: pointer; transition: transform 0.15s, border-color 0.15s;
+    }
+    .stat:hover { transform: translateY(-1px); border-color: #35507a; }
+    .stat::before {
+      content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--accent);
+    }
+    .stat.warn::before { background: var(--warn); }
+    .stat.danger::before { background: var(--danger); }
+    .stat.info::before { background: var(--info); }
+    .stat.ok::before { background: var(--ok); }
+    .stat-value { font-family: var(--mono); font-size: 26px; font-weight: 700; }
+    .stat.danger .stat-value { color: var(--danger); }
+    .stat.warn .stat-value { color: var(--warn); }
+    .stat.info .stat-value { color: #8eb6ff; }
+    .stat.ok .stat-value { color: var(--ok); }
+    .stat-label {
+      font-size: 11px; color: var(--muted); margin-top: 6px;
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+
+    .card {
+      background: var(--bg-elev); border: 1px solid var(--line);
+      border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px;
+    }
+    .card h3 { font-size: 14px; margin-bottom: 12px; color: var(--text); }
+    .card-head {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .card-head h3 { margin-bottom: 0; }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .row > * { flex: 1 1 160px; min-width: 0; }
+    .row .grow { flex: 2 1 240px; }
+    .row .shrink { flex: 0 0 auto; }
+
+    label.field {
+      display: block; font-size: 12px; color: var(--muted);
+      font-weight: 600; margin-bottom: 6px;
+    }
+    input, select, textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+      border-radius: 8px; font-size: 14px; background: var(--bg-card); color: var(--text);
+      font-family: var(--sans);
+    }
+    textarea { resize: vertical; min-height: 72px; }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: rgba(61, 224, 199, 0.55);
+      box-shadow: 0 0 0 3px rgba(61, 224, 199, 0.1);
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line);
+      background: transparent; color: var(--text); cursor: pointer;
+      font-size: 13px; font-weight: 700; white-space: nowrap; transition: all 0.15s;
+    }
+    .btn:hover { border-color: #3f567a; background: rgba(255,255,255,0.03); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, #2bd4bd, #2a9df4);
+      color: #041018; border: none;
+    }
+    .btn-primary:hover { filter: brightness(1.06); }
+    .btn-accent {
+      background: var(--accent-dim); color: var(--accent);
+      border-color: rgba(61, 224, 199, 0.4);
+    }
+    .btn-danger {
+      color: #ff8a95; border-color: rgba(255, 107, 122, 0.4);
+      background: rgba(255, 107, 122, 0.08);
+    }
+    .btn-sm { padding: 6px 10px; font-size: 12px; }
+
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .chip {
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+      background: transparent; color: var(--muted); cursor: pointer; font-size: 12px;
+    }
+    .chip:hover { color: var(--text); }
+    .chip.active {
+      background: var(--accent-dim); color: var(--accent);
+      border-color: rgba(61, 224, 199, 0.45);
+    }
+
+    table.data {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    table.data th, table.data td {
+      text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    table.data th {
+      color: var(--muted); font-size: 11px; letter-spacing: 0.04em;
+      text-transform: uppercase; font-weight: 700;
+    }
+    table.data tr:hover td { background: rgba(255,255,255,0.02); }
+    table.data tr.clickable { cursor: pointer; }
+    .mono { font-family: var(--mono); font-size: 12px; }
+    .muted { color: var(--muted); }
+    .empty, .loading-box {
+      text-align: center; padding: 36px 16px; color: var(--muted);
+      background: var(--bg-elev); border: 1px dashed var(--line);
+      border-radius: 12px; font-family: var(--mono); font-size: 13px;
+    }
+    .loading-box { color: var(--accent); }
+
+    .badge {
+      display: inline-flex; align-items: center; padding: 3px 8px;
+      border-radius: 999px; font-size: 11px; font-weight: 700;
+      border: 1px solid transparent; font-family: var(--mono);
+    }
+    .badge-status { background: rgba(91,140,255,0.15); color: #8eb6ff; border-color: rgba(91,140,255,0.35); }
+    .badge-warn { background: rgba(255,176,32,0.15); color: #ffc357; border-color: rgba(255,176,32,0.35); }
+    .badge-danger { background: rgba(255,107,122,0.15); color: #ff8a95; border-color: rgba(255,107,122,0.35); }
+    .badge-ok { background: rgba(61,220,151,0.15); color: #63e6b0; border-color: rgba(61,220,151,0.35); }
+    .badge-muted { background: rgba(143,163,193,0.12); color: var(--muted); border-color: var(--line); }
+
+    .list { display: grid; gap: 10px; }
+    .list-item {
+      background: var(--bg-card); border: 1px solid var(--line); border-radius: 10px;
+      padding: 12px 14px; cursor: pointer; transition: border-color 0.15s, transform 0.15s;
+      border-left: 3px solid var(--accent);
+    }
+    .list-item:hover { border-color: #35507a; transform: translateY(-1px); }
+    .list-item.selected { border-color: rgba(61,224,199,0.55); box-shadow: 0 0 0 1px rgba(61,224,199,0.2); }
+    .list-item .title { font-weight: 700; margin-bottom: 4px; }
+    .list-item .sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 1100px) {
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 800px) {
+      body { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; position: relative; }
+      .nav { flex-direction: row; flex-wrap: wrap; }
+    }
+
+    /* Drawer */
+    .drawer-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(4, 8, 16, 0.72);
+      z-index: 1000; backdrop-filter: blur(3px);
+    }
+    .drawer-overlay.show { display: block; }
+    .drawer {
+      display: none; position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 96vw);
+      background: var(--bg-elev); border-left: 1px solid var(--line);
+      z-index: 1001; box-shadow: var(--shadow); overflow-y: auto;
+      padding: 20px;
+    }
+    .drawer.show { display: block; }
+    .drawer-head {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 12px; margin-bottom: 16px;
+    }
+    .drawer-head h3 { font-size: 16px; }
+    .timeline { display: grid; gap: 10px; margin-top: 8px; }
+    .tl-item {
+      border-left: 2px solid var(--line); padding: 0 0 8px 12px; position: relative;
+    }
+    .tl-item::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); position: absolute; left: -5px; top: 4px;
+    }
+    .tl-item .when { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .tl-item .what { font-size: 13px; margin-top: 2px; }
+
+    .modal {
+      display: none; position: fixed; inset: 0; background: rgba(4, 8, 16, 0.72);
+      z-index: 1100; justify-content: center; align-items: center; backdrop-filter: blur(4px);
+    }
+    .modal.show { display: flex; }
+    .modal-content {
+      background: var(--bg-elev); border: 1px solid var(--line); padding: 22px;
+      border-radius: 14px; max-width: 480px; width: 92%; box-shadow: var(--shadow);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; padding: 12px 16px;
+      background: var(--bg-card); color: var(--text);
+      border: 1px solid rgba(61, 224, 199, 0.35); border-radius: 10px;
+      box-shadow: var(--shadow); display: none; z-index: 2000; font-size: 13px;
+      max-width: 360px;
+    }
+    .toast.show { display: block; animation: slideIn 0.25s ease-out; }
+    .toast.err { border-color: rgba(255,107,122,0.45); }
+    @keyframes slideIn {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .actions-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .section-gap { margin-top: 16px; }
+    .photo-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+    .split-desk { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 14px; }
+    @media (max-width: 1100px) { .split-desk { grid-template-columns: 1fr; } }
+    .sched-group { margin-bottom: 16px; }
+    .sched-group h4 {
+      font-size: 13px; color: var(--accent); margin-bottom: 8px;
+      font-family: var(--mono); letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">HQ</div>
+      <h1>빅워시 HQ</h1>
+      <p>CRM · AS · Workforce</p>
+    </div>
+    <nav class="nav" id="mainNav">
+      <button type="button" data-panel="dashboard" class="active">대시보드</button>
+      <button type="button" data-panel="desk">접수 데스크</button>
+      <button type="button" data-panel="board">AS 보드</button>
+      <button type="button" data-panel="schedule">스케줄</button>
+      <button type="button" data-panel="customers">고객</button>
+      <button type="button" data-panel="equipment">장비</button>
+      <button type="button" data-panel="users">직원</button>
+      <button type="button" data-panel="mall">사내몰</button>
+      <button type="button" data-panel="regions">권역·출장비</button>
+      <button type="button" data-panel="settle">정산</button>
+      <button type="button" data-panel="reports">보고</button>
+      <button type="button" data-panel="followup">사후함</button>
+      <button type="button" data-panel="settings">설정</button>
+    </nav>
+    <div class="user-box">
+      <div class="name" id="userName">—</div>
+      <div class="role" id="userRole">—</div>
+      <button type="button" class="logout-btn" onclick="logout()">로그아웃</button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h2 id="panelTitle">대시보드</h2>
+        <div class="meta" id="panelMeta"></div>
+      </div>
+      <button type="button" class="btn btn-sm" onclick="refreshCurrent()">새로고침</button>
+    </div>
+    <div class="content">
+      <!-- Dashboard -->
+      <section class="panel active" id="panel-dashboard">
+        <div class="stats" id="dashStats"></div>
+        <div class="card">
+          <div class="card-head">
+            <h3>빠른 이동</h3>
+          </div>
+          <div class="actions-bar">
+            <button type="button" class="btn btn-accent" onclick="showPanel('desk')">접수 데스크</button>
+            <button type="button" class="btn" onclick="showPanel('board'); loadBoard('waiting_assign')">미배정 보드</button>
+            <button type="button" class="btn" onclick="showPanel('followup')">사후함</button>
+            <button type="button" class="btn" onclick="showPanel('schedule')">오늘 스케줄</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Desk -->
+      <section class="panel" id="panel-desk">
+        <div class="split-desk">
+          <div>
+            <div class="card">
+              <h3>전화 검색</h3>
+              <div class="row">
+                <div class="grow">
+                  <label class="field" for="deskPhone">수신 번호</label>
+                  <input id="deskPhone" type="text" placeholder="01012345678" />
+                </div>
+                <div class="shrink">
+                  <label class="field">&nbsp;</label>
+                  <button type="button" class="btn btn-primary" onclick="deskSearch()">검색</button>
+                </div>
+              </div>
+              <div id="deskCustomerResults" class="section-gap"></div>
+            </div>
+
+            <div class="card" id="deskCustomerCreateCard">
+              <h3>신규 고객</h3>
+              <div class="row">
+                <div>
+                  <label class="field">유형</label>
+                  <select id="custType">
+                    <option value="franchise">가맹</option>
+                    <option value="shop" selected>개인매장</option>
+                    <option value="direct">직영</option>
+                    <option value="other">기타</option>
+                  </select>
+                </div>
+                <div class="grow">
+                  <label class="field">상호/표시명 *</label>
+                  <input id="custName" type="text" />
+                </div>
+              </div>
+              <div class="row section-gap">
+                <div>
+                  <label class="field">대표 전화 *</label>
+                  <input id="custPhone" type="text" />
+                </div>
+                <div>
+                  <label class="field">담당자</label>
+                  <input id="custContact" type="text" />
+                </div>
+              </div>
+              <div class="section-gap">
+                <label class="field">주소</label>
+                <input id="custAddress" type="text" />
+              </div>
+              <div class="actions-bar">
+                <button type="button" class="btn btn-primary" onclick="createCustomer()">고객 등록</button>
+              </div>
+            </div>
+
+            <div class="card" id="deskEquipmentCard" style="display:none;">
+              <div class="card-head">
+                <h3>보유 장비</h3>
+                <button type="button" class="btn btn-sm btn-accent" onclick="toggleEqForm()">＋ 장비 추가</button>
+              </div>
+              <div id="deskEquipmentList"></div>
+              <div id="deskEqForm" style="display:none;" class="section-gap">
+                <div class="row">
+                  <div class="grow">
+                    <label class="field">장비명 *</label>
+                    <input id="eqName" type="text" placeholder="고압세척기" />
+                  </div>
+                  <div>
+                    <label class="field">모델</label>
+                    <input id="eqModel" type="text" />
+                  </div>
+                </div>
+                <div class="row section-gap">
+                  <div>
+                    <label class="field">시리얼</label>
+                    <input id="eqSerial" type="text" />
+                  </div>
+                  <div>
+                    <label class="field">설치일</label>
+                    <input id="eqInstalled" type="date" />
+                  </div>
+                  <div>
+                    <label class="field">보증만료</label>
+                    <input id="eqWarranty" type="date" />
+                  </div>
+                </div>
+                <div class="section-gap">
+                  <label class="field">설치 위치</label>
+                  <input id="eqLocation" type="text" />
+                </div>
+                <div class="actions-bar">
+                  <button type="button" class="btn btn-primary" onclick="createEquipment()">장비 저장</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="card" id="deskTicketCard" style="display:none;">
+              <h3>AS 접수</h3>
+              <div class="muted mono" id="deskSelectedInfo" style="margin-bottom:10px;"></div>
+              <div>
+                <label class="field">장비 *</label>
+                <select id="ticketEq"></select>
+              </div>
+              <div class="section-gap">
+                <label class="field">증상 *</label>
+                <textarea id="ticketSymptom" placeholder="고장 증상"></textarea>
+              </div>
+              <div class="row section-gap">
+                <div>
+                  <label class="field">고장 유형</label>
+                  <input id="ticketFault" type="text" placeholder="펌프/노즐/전원 등" />
+                </div>
+                <div>
+                  <label class="field">긴급도</label>
+                  <select id="ticketUrgency">
+                    <option value="normal">일반</option>
+                    <option value="same_day">당일</option>
+                    <option value="urgent">긴급</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row section-gap">
+                <div>
+                  <label class="field">희망 방문</label>
+                  <input id="ticketPreferred" type="datetime-local" />
+                </div>
+                <div>
+                  <label class="field">청구 유형</label>
+                  <select id="ticketBill">
+                    <option value="unknown">미정</option>
+                    <option value="warranty">무상</option>
+                    <option value="paid">유상</option>
+                  </select>
+                </div>
+              </div>
+              <div class="row section-gap">
+                <div>
+                  <label class="field">배정 기사</label>
+                  <select id="ticketAssignee"><option value="">미배정</option></select>
+                </div>
+                <div>
+                  <label class="field">수신번호</label>
+                  <input id="ticketIntakePhone" type="text" />
+                </div>
+              </div>
+              <div class="section-gap">
+                <label class="field">접수 메모</label>
+                <textarea id="ticketMemo"></textarea>
+              </div>
+              <div class="actions-bar">
+                <button type="button" class="btn btn-primary" onclick="createTicket()">티켓 생성</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>통화 로그</h3>
+              <div class="row">
+                <div>
+                  <label class="field">전화 *</label>
+                  <input id="callPhone" type="text" />
+                </div>
+                <div>
+                  <label class="field">유형</label>
+                  <select id="callType">
+                    <option value="as">AS</option>
+                    <option value="booking">예약문의</option>
+                    <option value="claim">클레임</option>
+                    <option value="parts">부품</option>
+                    <option value="other">기타</option>
+                  </select>
+                </div>
+              </div>
+              <div class="section-gap">
+                <label class="field">메모</label>
+                <textarea id="callMemo"></textarea>
+              </div>
+              <div class="actions-bar">
+                <button type="button" class="btn btn-accent" onclick="createCallLog()">통화 저장</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Board -->
+      <section class="panel" id="panel-board">
+        <div class="filters" id="boardFilters"></div>
+        <div class="card">
+          <div id="boardList"></div>
+        </div>
+      </section>
+
+      <!-- Schedule -->
+      <section class="panel" id="panel-schedule">
+        <div class="card">
+          <div class="card-head">
+            <h3>스케줄 (scheduled_at 기준)</h3>
+            <button type="button" class="btn btn-sm" onclick="loadSchedule()">다시 불러오기</button>
+          </div>
+          <div id="scheduleList"></div>
+        </div>
+      </section>
+
+      <!-- Customers -->
+      <section class="panel" id="panel-customers">
+        <div class="card">
+          <div class="row">
+            <div class="grow">
+              <label class="field">전화 검색</label>
+              <input id="custSearchPhone" type="text" placeholder="전체는 비우고 검색" />
+            </div>
+            <div class="shrink">
+              <label class="field">&nbsp;</label>
+              <button type="button" class="btn btn-primary" onclick="loadCustomers()">검색</button>
+            </div>
+          </div>
+          <div id="customersList" class="section-gap"></div>
+        </div>
+      </section>
+
+      <!-- Equipment -->
+      <section class="panel" id="panel-equipment">
+        <div class="card">
+          <div class="row">
+            <div class="grow">
+              <label class="field">고객 ID (선택)</label>
+              <input id="eqSearchCustomer" type="text" placeholder="비우면 전체" />
+            </div>
+            <div class="shrink">
+              <label class="field">&nbsp;</label>
+              <button type="button" class="btn btn-primary" onclick="loadEquipmentPanel()">검색</button>
+            </div>
+          </div>
+          <div id="equipmentList" class="section-gap"></div>
+        </div>
+      </section>
+
+      <!-- Users -->
+      <section class="panel" id="panel-users">
+        <div class="card">
+          <div class="card-head">
+            <h3>직원 목록</h3>
+            <button type="button" class="btn btn-sm" onclick="stubCreateUser()">＋ 직원 추가 (stub)</button>
+          </div>
+          <div id="usersList"></div>
+        </div>
+      </section>
+
+      <!-- Followup -->
+      <section class="panel" id="panel-mall">
+        <div class="card">
+          <div class="card-head"><h3>사내몰 상품</h3>
+            <button type="button" class="btn btn-primary" onclick="createProduct()">＋ 상품</button></div>
+          <div id="mallList"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-regions">
+        <div class="card">
+          <div class="card-head"><h3>권역·출장요금표</h3>
+            <button type="button" class="btn btn-primary" onclick="createRegion()">＋ 권역</button></div>
+          <div id="regionsList"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-settle">
+        <div class="card">
+          <div class="card-head"><h3>정산</h3></div>
+          <div class="filters" style="margin-bottom:12px">
+            <button type="button" class="btn btn-sm" onclick="loadUnpaid()">미수</button>
+            <button type="button" class="btn btn-sm" onclick="loadExpenses()">경비</button>
+            <button type="button" class="btn btn-sm" onclick="loadPayroll()">급여</button>
+            <button type="button" class="btn btn-sm" onclick="createExpense()">경비신청</button>
+            <button type="button" class="btn btn-sm" onclick="createPayroll()">급여입력</button>
+          </div>
+          <div id="settleList"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-reports">
+        <div class="card">
+          <div class="card-head"><h3>보고 (CSV/엑셀)</h3>
+            <div>
+              <button type="button" class="btn btn-sm" onclick="loadReport('daily')">일</button>
+              <button type="button" class="btn btn-sm" onclick="loadReport('weekly')">주</button>
+              <button type="button" class="btn btn-sm" onclick="loadReport('monthly')">월</button>
+            </div>
+          </div>
+          <pre id="reportOut" class="mono" style="white-space:pre-wrap;font-size:12px"></pre>
+        </div>
+      </section>
+      <section class="panel" id="panel-followup">
+        <div class="card">
+          <div class="card-head">
+            <h3>사후함</h3>
+            <span class="muted mono">followup · 사진미완 · followup_status pending</span>
+          </div>
+          <div id="followupList"></div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="panel" id="panel-settings">
+        <div class="card">
+          <div class="card-head"><h3>설정 (1차 잠금값)</h3></div>
+          <div id="settingsBody" class="muted">로딩…</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Ticket drawer -->
+  <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="ticketDrawer">
+    <div class="drawer-head">
+      <div>
+        <h3 id="drawerTitle">티켓</h3>
+        <div class="muted mono" id="drawerSub"></div>
+      </div>
+      <button type="button" class="btn btn-sm" onclick="closeDrawer()">닫기</button>
+    </div>
+    <div id="drawerBody"></div>
+  </aside>
+
+  <!-- Generic modal -->
+  <div class="modal" id="modal">
+    <div class="modal-content" id="modalContent"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const STATUS_LABELS = {
+      received: '접수',
+      waiting_assign: '배정대기',
+      assigned: '배정됨',
+      en_route: '출동중',
+      repairing: '수리중',
+      parts_wait: '부품대기',
+      done: '완료',
+      followup: '사후확인',
+      closed: '종결',
+      hold: '보류',
+      cancelled: '취소',
+      reopen: '재오픈'
+    };
+    const STATUS_ORDER = [
+      'received','waiting_assign','assigned','en_route','repairing','parts_wait',
+      'done','followup','closed','hold','cancelled','reopen'
+    ];
+    const TRANSITIONS = {
+      received: ['waiting_assign', 'assigned'],
+      waiting_assign: ['assigned'],
+      assigned: ['en_route', 'hold', 'cancelled'],
+      en_route: ['repairing', 'parts_wait', 'done'],
+      repairing: ['parts_wait', 'done'],
+      parts_wait: ['repairing', 'done'],
+      done: ['followup'],
+      followup: ['closed', 'reopen'],
+      closed: ['reopen'],
+      reopen: ['waiting_assign', 'assigned'],
+      hold: ['assigned', 'waiting_assign', 'cancelled'],
+      cancelled: []
+    };
+    const PANEL_TITLES = {
+      dashboard: '대시보드',
+      desk: '전화 데스크',
+      board: '출장/티켓 보드',
+      schedule: '스케줄',
+      customers: '고객',
+      equipment: '장비',
+      users: '직원',
+      mall: '사내몰',
+      regions: '권역·출장요금표',
+      settle: '정산',
+      reports: '보고',
+      followup: '사후함',
+      settings: '설정'
+    };
+
+    let token = localStorage.getItem('hq_token');
+    let user = {};
+    try { user = JSON.parse(localStorage.getItem('hq_user') || '{}'); } catch (_) { user = {}; }
+    let currentPanel = 'dashboard';
+    let boardStatus = '';
+    let selectedCustomer = null;
+    let selectedEquipmentId = null;
+    let staffCache = [];
+    let currentTicketDetail = null;
+
+    if (!token) {
+      window.location.href = '/hq/login.html';
+    }
+
+    function logout() {
+      localStorage.removeItem('hq_token');
+      localStorage.removeItem('hq_user');
+      window.location.href = '/hq/login.html';
+    }
+
+    function toast(msg, isErr) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.toggle('err', !!isErr);
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2800);
+    }
+
+    async function api(path, opts = {}) {
+      const headers = Object.assign(
+        { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        opts.headers || {}
+      );
+      const res = await fetch(path, Object.assign({}, opts, { headers }));
+      let data = null;
+      try { data = await res.json(); } catch (_) { data = {}; }
+      if (res.status === 401) {
+        logout();
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) throw new Error((data && data.error) || ('요청 실패 ' + res.status));
+      return data;
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function statusBadge(st) {
+      const label = STATUS_LABELS[st] || st || '-';
+      let cls = 'badge-status';
+      if (st === 'waiting_assign' || st === 'hold' || st === 'parts_wait') cls = 'badge-warn';
+      if (st === 'cancelled' || st === 'reopen') cls = 'badge-danger';
+      if (st === 'done' || st === 'closed' || st === 'followup') cls = 'badge-ok';
+      if (st === 'received') cls = 'badge-danger';
+      return '<span class="badge ' + cls + '">' + esc(label) + '</span>';
+    }
+
+    function truthyFlag(v) {
+      return v === true || v === 'true' || v === 1 || v === '1';
+    }
+
+    function openModal(html) {
+      const m = document.getElementById('modal');
+      document.getElementById('modalContent').innerHTML = html;
+      m.classList.add('show');
+      m.style.display = 'flex';
+    }
+    function closeModal() {
+      const m = document.getElementById('modal');
+      m.classList.remove('show');
+      m.style.display = 'none';
+    }
+    function closeDrawer() {
+      document.getElementById('drawerOverlay').classList.remove('show');
+      document.getElementById('drawerOverlay').style.display = 'none';
+      const d = document.getElementById('ticketDrawer');
+      d.classList.remove('show');
+      d.style.display = 'none';
+      currentTicketDetail = null;
+    }
+    function openDrawer() {
+      document.getElementById('drawerOverlay').classList.add('show');
+      document.getElementById('drawerOverlay').style.display = 'block';
+      const d = document.getElementById('ticketDrawer');
+      d.classList.add('show');
+      d.style.display = 'block';
+    }
+
+    function showPanel(name) {
+      currentPanel = name;
+      document.querySelectorAll('.panel').forEach((p) => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+      });
+      const el = document.getElementById('panel-' + name);
+      if (el) {
+        el.classList.add('active');
+        el.style.display = 'block';
+      }
+      document.querySelectorAll('#mainNav button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.panel === name);
+      });
+      document.getElementById('panelTitle').textContent = PANEL_TITLES[name] || name;
+      document.getElementById('panelMeta').textContent = new Date().toLocaleString('ko-KR');
+      refreshCurrent();
+    }
+
+    function refreshCurrent() {
+      if (currentPanel === 'dashboard') loadDashboard();
+      else if (currentPanel === 'desk') ensureStaffSelects();
+      else if (currentPanel === 'board') loadBoard(boardStatus);
+      else if (currentPanel === 'schedule') loadSchedule();
+      else if (currentPanel === 'customers') loadCustomers();
+      else if (currentPanel === 'equipment') loadEquipmentPanel();
+      else if (currentPanel === 'users') loadUsers();
+      else if (currentPanel === 'mall') loadMall();
+      else if (currentPanel === 'regions') loadRegions();
+      else if (currentPanel === 'settle') loadUnpaid();
+      else if (currentPanel === 'reports') loadReport('daily');
+      else if (currentPanel === 'followup') loadFollowup();
+      else if (currentPanel === 'settings') loadSettings();
+    }
+
+    async function openCustomerHub(id) {
+      try {
+        const hub = await api('/hq/customers/' + encodeURIComponent(id) + '/hub');
+        const c = hub.customer || {};
+        openModal(
+          '<div class="modal-header">고객 허브 · ' + esc(c.display_name || '') + '</div>' +
+          '<div class="mono muted">' + esc(c.customer_id) + ' · ' + esc(c.primary_phone) + '</div>' +
+          '<p style="margin:10px 0">' + esc(c.address || '') + ' / ' + esc(c.contact_name || '') + '</p>' +
+          '<div class="form-group"><label>전화 변경</label><div style="display:flex;gap:8px">' +
+          '<input id="hubPhone" value="' + esc(c.primary_phone || '') + '" />' +
+          '<button type="button" class="btn btn-primary" id="hubPhoneSave">저장</button></div></div>' +
+          '<h4>전화이력</h4><div class="mono" style="font-size:11px">' +
+          esc((hub.phones || []).map(function (p) { return p.phone + ' (' + p.kind + ')'; }).join(' · ')) + '</div>' +
+          '<h4>장비 ' + (hub.equipment || []).length + '</h4>' +
+          '<ul>' + (hub.equipment || []).map(function (e) { return '<li>' + esc(e.name) + ' ' + esc(e.serial || '') + '</li>'; }).join('') + '</ul>' +
+          '<h4>티켓 ' + (hub.tickets || []).length + '</h4>' +
+          '<ul>' + (hub.tickets || []).map(function (t) { return '<li class="mono">' + esc(t.number) + ' ' + esc(t.status) + '</li>'; }).join('') + '</ul>' +
+          '<div class="modal-actions"><button type="button" class="btn" onclick="closeModal()">닫기</button></div>'
+        );
+        document.getElementById('hubPhoneSave').onclick = async function () {
+          try {
+            await api('/hq/customers/' + encodeURIComponent(id) + '/phone', {
+              method: 'POST',
+              body: JSON.stringify({ primary_phone: document.getElementById('hubPhone').value.trim() })
+            });
+            toast('전화 변경 저장');
+            closeModal();
+            loadCustomers();
+          } catch (e) { toast(e.message, true); }
+        };
+      } catch (e) { toast(e.message, true); }
+    }
+
+    document.getElementById('mainNav').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-panel]');
+      if (btn) showPanel(btn.dataset.panel);
+    });
+
+    // ----- Dashboard -----
+    async function loadDashboard() {
+      const box = document.getElementById('dashStats');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const d = await api('/hq/dashboard');
+        const cards = [
+          { key: 'today_calls', label: '오늘 전화', cls: '', go: 'desk' },
+          { key: 'today_visits', label: '오늘 방문', cls: 'info', go: 'schedule' },
+          { key: 'unassigned', label: '미배정', cls: 'warn', go: 'board', status: 'waiting_assign' },
+          { key: 'delayed', label: '지연', cls: 'danger', go: 'board', status: 'waiting_assign' },
+          { key: 'parts_wait', label: '부품대기', cls: 'warn', go: 'board', status: 'parts_wait' },
+          { key: 'photo_incomplete', label: '사진미완', cls: 'danger', go: 'followup' },
+          { key: 'today_done', label: '오늘 완료', cls: 'ok', go: 'board', status: 'done' },
+          { key: 'repeats', label: '재고장', cls: 'danger', go: 'board' }
+        ];
+        box.innerHTML = cards.map((c) =>
+          '<div class="stat ' + c.cls + '" data-go="' + c.go + '" data-status="' + (c.status || '') + '">' +
+          '<div class="stat-value">' + esc(d[c.key] ?? 0) + '</div>' +
+          '<div class="stat-label">' + c.label + '</div></div>'
+        ).join('');
+        box.querySelectorAll('.stat').forEach((el) => {
+          el.addEventListener('click', () => {
+            const go = el.dataset.go;
+            const st = el.dataset.status || '';
+            showPanel(go);
+            if (go === 'board') loadBoard(st);
+          });
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    // ----- Desk -----
+    async function ensureStaffSelects() {
+      try {
+        staffCache = await api('/hq/users?assignable=1');
+        if (!Array.isArray(staffCache)) staffCache = [];
+        const active = staffCache.filter((u) => (u.employment_status || 'active') === 'active');
+        const sel = document.getElementById('ticketAssignee');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">미배정</option>' +
+          active.map((u) => '<option value="' + esc(u.user_id) + '">' + esc(u.name || u.login) +
+            ' (' + esc(u.role || '') + ')</option>').join('');
+        if (cur) sel.value = cur;
+      } catch (_) { /* ignore */ }
+    }
+
+    async function deskSearch() {
+      const phone = document.getElementById('deskPhone').value.trim();
+      const box = document.getElementById('deskCustomerResults');
+      box.innerHTML = '<div class="loading-box">검색 중…</div>';
+      document.getElementById('callPhone').value = phone;
+      document.getElementById('custPhone').value = phone;
+      document.getElementById('ticketIntakePhone').value = phone;
+      try {
+        const q = phone ? ('?phone=' + encodeURIComponent(phone)) : '';
+        const rows = await api('/hq/customers' + q);
+        if (!rows || !rows.length) {
+          box.innerHTML = '<div class="empty">고객 없음 — 아래 신규 고객을 등록하세요.</div>';
+          selectedCustomer = null;
+          document.getElementById('deskEquipmentCard').style.display = 'none';
+          document.getElementById('deskTicketCard').style.display = 'none';
+          return;
+        }
+        box.innerHTML = '<div class="list">' + rows.map((c) =>
+          '<div class="list-item" data-id="' + esc(c.customer_id) + '">' +
+          '<div class="title">' + esc(c.display_name) + ' <span class="badge badge-muted">' + esc(c.type || '') + '</span></div>' +
+          '<div class="sub">' + esc(c.primary_phone) + ' · ' + esc(c.address || '-') +
+          (c.contact_name ? ' · ' + esc(c.contact_name) : '') + '</div></div>'
+        ).join('') + '</div>';
+        box.querySelectorAll('.list-item').forEach((el) => {
+          el.addEventListener('click', () => selectCustomer(el.dataset.id, rows));
+        });
+        if (rows.length === 1) selectCustomer(rows[0].customer_id, rows);
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function selectCustomer(id, rows) {
+      selectedCustomer = (rows || []).find((c) => c.customer_id === id) || null;
+      if (!selectedCustomer) {
+        try { selectedCustomer = await api('/hq/customers/' + encodeURIComponent(id)); }
+        catch (e) { toast(e.message, true); return; }
+      }
+      document.querySelectorAll('#deskCustomerResults .list-item').forEach((el) => {
+        el.classList.toggle('selected', el.dataset.id === id);
+      });
+      document.getElementById('deskEquipmentCard').style.display = 'block';
+      document.getElementById('deskTicketCard').style.display = 'block';
+      document.getElementById('deskSelectedInfo').textContent =
+        selectedCustomer.display_name + ' · ' + (selectedCustomer.primary_phone || '');
+      document.getElementById('callPhone').value = selectedCustomer.primary_phone || '';
+      document.getElementById('ticketIntakePhone').value =
+        document.getElementById('deskPhone').value.trim() || selectedCustomer.primary_phone || '';
+      await loadDeskEquipment();
+      await ensureStaffSelects();
+    }
+
+    async function loadDeskEquipment() {
+      if (!selectedCustomer) return;
+      const box = document.getElementById('deskEquipmentList');
+      const sel = document.getElementById('ticketEq');
+      box.innerHTML = '<div class="loading-box">장비 로딩…</div>';
+      try {
+        const rows = await api('/hq/equipment?customer_id=' + encodeURIComponent(selectedCustomer.customer_id));
+        if (!rows.length) {
+          box.innerHTML = '<div class="empty">장비 없음 — 추가하세요.</div>';
+          sel.innerHTML = '<option value="">장비 없음</option>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr><th>이름</th><th>모델</th><th>시리얼</th><th>위치</th></tr></thead><tbody>' +
+          rows.map((e) => '<tr class="clickable" data-id="' + esc(e.equipment_id) + '"><td>' + esc(e.name) +
+            '</td><td class="mono">' + esc(e.model || '-') + '</td><td class="mono">' + esc(e.serial || '-') +
+            '</td><td>' + esc(e.location_note || '-') + '</td></tr>').join('') +
+          '</tbody></table>';
+        sel.innerHTML = rows.map((e) =>
+          '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) +
+          (e.model ? ' / ' + esc(e.model) : '') + '</option>'
+        ).join('');
+        if (selectedEquipmentId) sel.value = selectedEquipmentId;
+        box.querySelectorAll('tr.clickable').forEach((tr) => {
+          tr.addEventListener('click', () => {
+            selectedEquipmentId = tr.dataset.id;
+            sel.value = selectedEquipmentId;
+          });
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    function toggleEqForm() {
+      const f = document.getElementById('deskEqForm');
+      f.style.display = f.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function createCustomer() {
+      const body = {
+        type: document.getElementById('custType').value,
+        display_name: document.getElementById('custName').value.trim(),
+        primary_phone: document.getElementById('custPhone').value.trim(),
+        contact_name: document.getElementById('custContact').value.trim(),
+        address: document.getElementById('custAddress').value.trim()
+      };
+      try {
+        const row = await api('/hq/customers', { method: 'POST', body: JSON.stringify(body) });
+        toast('고객 등록 완료');
+        document.getElementById('deskPhone').value = row.primary_phone;
+        await deskSearch();
+        await selectCustomer(row.customer_id, [row]);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function createEquipment() {
+      if (!selectedCustomer) return toast('고객을 먼저 선택하세요', true);
+      const body = {
+        customer_id: selectedCustomer.customer_id,
+        name: document.getElementById('eqName').value.trim(),
+        model: document.getElementById('eqModel').value.trim(),
+        serial: document.getElementById('eqSerial').value.trim(),
+        installed_on: document.getElementById('eqInstalled').value,
+        warranty_until: document.getElementById('eqWarranty').value,
+        location_note: document.getElementById('eqLocation').value.trim()
+      };
+      try {
+        const row = await api('/hq/equipment', { method: 'POST', body: JSON.stringify(body) });
+        toast('장비 등록 완료');
+        selectedEquipmentId = row.equipment_id;
+        document.getElementById('deskEqForm').style.display = 'none';
+        ['eqName','eqModel','eqSerial','eqInstalled','eqWarranty','eqLocation'].forEach((id) => {
+          document.getElementById(id).value = '';
+        });
+        await loadDeskEquipment();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function createTicket() {
+      if (!selectedCustomer) return toast('고객을 선택하세요', true);
+      const equipment_id = document.getElementById('ticketEq').value;
+      if (!equipment_id) return toast('장비가 필요합니다', true);
+      const preferred = document.getElementById('ticketPreferred').value;
+      const body = {
+        customer_id: selectedCustomer.customer_id,
+        equipment_id,
+        symptom: document.getElementById('ticketSymptom').value.trim(),
+        fault_type: document.getElementById('ticketFault').value.trim(),
+        urgency: document.getElementById('ticketUrgency').value,
+        assignee_id: document.getElementById('ticketAssignee').value || '',
+        preferred_at: preferred ? new Date(preferred).toISOString() : '',
+        intake_phone: document.getElementById('ticketIntakePhone').value.trim(),
+        intake_memo: document.getElementById('ticketMemo').value.trim(),
+        bill_type: document.getElementById('ticketBill').value
+      };
+      try {
+        const row = await api('/hq/tickets', { method: 'POST', body: JSON.stringify(body) });
+        toast('티켓 생성: ' + (row.number || row.ticket_id));
+        document.getElementById('ticketSymptom').value = '';
+        document.getElementById('ticketMemo').value = '';
+        openTicket(row.ticket_id);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function createCallLog() {
+      const body = {
+        phone: document.getElementById('callPhone').value.trim(),
+        call_type: document.getElementById('callType').value,
+        memo: document.getElementById('callMemo').value.trim(),
+        customer_id: selectedCustomer ? selectedCustomer.customer_id : '',
+        ticket_id: currentTicketDetail && currentTicketDetail.ticket
+          ? currentTicketDetail.ticket.ticket_id : ''
+      };
+      try {
+        await api('/hq/calls', { method: 'POST', body: JSON.stringify(body) });
+        toast('통화 로그 저장');
+        document.getElementById('callMemo').value = '';
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ----- Board -----
+    function renderBoardFilters() {
+      const box = document.getElementById('boardFilters');
+      const items = [{ v: '', l: '전체' }].concat(STATUS_ORDER.map((s) => ({ v: s, l: STATUS_LABELS[s] })));
+      box.innerHTML = items.map((i) =>
+        '<button type="button" class="chip' + (boardStatus === i.v ? ' active' : '') +
+        '" data-status="' + i.v + '">' + i.l + '</button>'
+      ).join('');
+      box.querySelectorAll('.chip').forEach((b) => {
+        b.addEventListener('click', () => loadBoard(b.dataset.status));
+      });
+    }
+
+    async function loadBoard(status) {
+      boardStatus = status == null ? boardStatus : status;
+      renderBoardFilters();
+      const box = document.getElementById('boardList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const q = boardStatus ? ('?status=' + encodeURIComponent(boardStatus)) : '';
+        const rows = await api('/hq/tickets' + q);
+        if (!rows.length) {
+          box.innerHTML = '<div class="empty">티켓 없음</div>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr>' +
+          '<th>번호</th><th>상태</th><th>증상</th><th>긴급</th><th>기사</th><th>일정</th><th>생성</th>' +
+          '</tr></thead><tbody>' +
+          rows.map((t) =>
+            '<tr class="clickable" data-id="' + esc(t.ticket_id) + '">' +
+            '<td class="mono">' + esc(t.number || t.ticket_id) + '</td>' +
+            '<td>' + statusBadge(t.status) +
+            (truthyFlag(t.photo_incomplete) ? ' <span class="badge badge-danger">사진</span>' : '') +
+            (truthyFlag(t.is_repeat) ? ' <span class="badge badge-warn">재고장</span>' : '') +
+            '</td>' +
+            '<td>' + esc(t.symptom || '') + '</td>' +
+            '<td class="mono">' + esc(t.urgency || '') + '</td>' +
+            '<td class="mono">' + esc(t.assignee_id || '-') + '</td>' +
+            '<td class="mono">' + esc(t.scheduled_at || '-') + '</td>' +
+            '<td class="mono">' + esc(t.created_at || '') + '</td></tr>'
+          ).join('') + '</tbody></table>';
+        box.querySelectorAll('tr.clickable').forEach((tr) => {
+          tr.addEventListener('click', () => openTicket(tr.dataset.id));
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function openTicket(id) {
+      try {
+        const data = await api('/hq/tickets/' + encodeURIComponent(id));
+        currentTicketDetail = data;
+        const t = data.ticket || {};
+        const events = data.events || [];
+        const photos = data.photos || [];
+        if (!staffCache.length) {
+          try { staffCache = await api('/hq/users?assignable=1'); } catch (_) {}
+        }
+        document.getElementById('drawerTitle').textContent = t.number || t.ticket_id;
+        document.getElementById('drawerSub').innerHTML = statusBadge(t.status) +
+          ' · ' + esc(t.urgency || '') +
+          (truthyFlag(t.is_repeat) ? ' · 재고장' : '') +
+          (truthyFlag(t.photo_incomplete) ? ' · 사진미완' : '');
+
+        const next = TRANSITIONS[t.status] || [];
+        const staffOpts = (staffCache || [])
+          .filter((u) => (u.employment_status || 'active') === 'active')
+          .map((u) => '<option value="' + esc(u.user_id) + '"' +
+            (u.user_id === t.assignee_id ? ' selected' : '') + '>' +
+            esc(u.name || u.login) + '</option>').join('');
+
+        const beforeN = photos.filter((p) => p.side === 'before').length;
+        const afterN = photos.filter((p) => p.side === 'after').length;
+
+        document.getElementById('drawerBody').innerHTML =
+          '<div class="card" style="box-shadow:none;padding:0;border:none;background:transparent;margin:0;">' +
+          '<p><strong>증상</strong><br/>' + esc(t.symptom || '-') + '</p>' +
+          '<p class="section-gap muted mono">고객 ' + esc(t.customer_id) + ' · 장비 ' + esc(t.equipment_id) + '</p>' +
+          '<p class="muted mono">청구 ' + esc(t.bill_type || '-') + ' · 희망 ' + esc(t.preferred_at || '-') + '</p>' +
+          '<p class="muted mono">접수전화 ' + esc(t.intake_phone || '-') + '</p>' +
+          (t.intake_memo ? '<p class="section-gap">' + esc(t.intake_memo) + '</p>' : '') +
+          '<div class="section-gap photo-meta">사진 before ' + beforeN + ' / after ' + afterN + '</div>' +
+          '<div class="section-gap"><label class="field">배정</label>' +
+          '<div class="row"><select id="assignSel">' + staffOpts + '</select>' +
+          '<button type="button" class="btn btn-sm btn-accent shrink" onclick="doAssign()">배정</button></div></div>' +
+          '<div class="section-gap"><label class="field">방문 일정</label>' +
+          '<div class="row"><input type="datetime-local" id="schedAt" />' +
+          '<button type="button" class="btn btn-sm shrink" onclick="doSchedule()">일정 저장</button></div></div>' +
+          '<div class="section-gap"><label class="field">상태 전환</label>' +
+          '<div class="actions-bar" id="transBtns">' +
+          next.map((s) => '<button type="button" class="btn btn-sm" data-to="' + s + '">' +
+            esc(STATUS_LABELS[s] || s) + '</button>').join('') +
+          (next.includes('cancelled') || (TRANSITIONS[t.status] || []).includes('cancelled')
+            ? '' : '') +
+          '</div>' +
+          '<div class="row section-gap"><input id="transMemo" type="text" placeholder="전환 메모" />' +
+          '<input id="cancelReason" type="text" placeholder="취소 사유 (취소 시)" /></div></div>' +
+          '<div class="section-gap"><label class="field">사진 업로드</label>' +
+          '<div class="row">' +
+          '<select id="photoSide"><option value="before">before</option><option value="after">after</option></select>' +
+          '<select id="photoSlot">' + [1,2,3,4,5].map((n) => '<option value="' + n + '">' + n + '</option>').join('') + '</select>' +
+          '</div>' +
+          '<input type="file" id="photoFile" accept="image/*" class="section-gap" />' +
+          '<button type="button" class="btn btn-sm btn-accent section-gap" onclick="doPhotoUpload()">업로드</button></div>' +
+          '<div class="section-gap"><h3 style="font-size:13px;margin-bottom:8px;">타임라인</h3>' +
+          '<div class="timeline">' +
+          (events.length ? events.map((ev) =>
+            '<div class="tl-item"><div class="when">' + esc(ev.at || '') + ' · ' + esc(ev.type || '') + '</div>' +
+            '<div class="what">' + esc((ev.from_status || '') + (ev.to_status ? ' → ' + ev.to_status : '')) +
+            (ev.memo ? ' — ' + esc(ev.memo) : '') + '</div></div>'
+          ).join('') : '<div class="muted">이벤트 없음</div>') +
+          '</div></div></div>';
+
+        document.querySelectorAll('#transBtns button[data-to]').forEach((b) => {
+          b.addEventListener('click', () => doTransition(b.dataset.to));
+        });
+        if (t.scheduled_at) {
+          try {
+            const d = new Date(t.scheduled_at);
+            if (!isNaN(d)) {
+              const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                .toISOString().slice(0, 16);
+              document.getElementById('schedAt').value = local;
+            }
+          } catch (_) {}
+        }
+        openDrawer();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function doAssign() {
+      if (!currentTicketDetail) return;
+      const id = currentTicketDetail.ticket.ticket_id;
+      const assignee_id = document.getElementById('assignSel').value;
+      if (!assignee_id) return toast('기사 선택', true);
+      try {
+        await api('/hq/tickets/' + encodeURIComponent(id) + '/assign', {
+          method: 'POST', body: JSON.stringify({ assignee_id })
+        });
+        toast('배정 완료');
+        openTicket(id);
+        if (currentPanel === 'board') loadBoard(boardStatus);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function doSchedule() {
+      if (!currentTicketDetail) return;
+      const id = currentTicketDetail.ticket.ticket_id;
+      const v = document.getElementById('schedAt').value;
+      if (!v) return toast('일시를 입력하세요', true);
+      const scheduled_at = new Date(v).toISOString();
+      try {
+        await api('/hq/tickets/' + encodeURIComponent(id) + '/schedule', {
+          method: 'POST', body: JSON.stringify({ scheduled_at })
+        });
+        toast('일정 저장');
+        openTicket(id);
+        if (currentPanel === 'schedule') loadSchedule();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function doTransition(to) {
+      if (!currentTicketDetail) return;
+      const id = currentTicketDetail.ticket.ticket_id;
+      const memo = document.getElementById('transMemo').value.trim();
+      const cancel_reason = document.getElementById('cancelReason').value.trim();
+      if (to === 'cancelled' && !cancel_reason) return toast('취소 사유 필요', true);
+      try {
+        await api('/hq/tickets/' + encodeURIComponent(id) + '/transition', {
+          method: 'POST',
+          body: JSON.stringify({ to, memo, cancel_reason: to === 'cancelled' ? cancel_reason : undefined })
+        });
+        toast('상태 → ' + (STATUS_LABELS[to] || to));
+        openTicket(id);
+        if (currentPanel === 'board') loadBoard(boardStatus);
+        if (currentPanel === 'followup') loadFollowup();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function doPhotoUpload() {
+      if (!currentTicketDetail) return;
+      const id = currentTicketDetail.ticket.ticket_id;
+      const file = document.getElementById('photoFile').files[0];
+      if (!file) return toast('파일을 선택하세요', true);
+      const side = document.getElementById('photoSide').value;
+      const slot = Number(document.getElementById('photoSlot').value);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const dataUrl = String(reader.result || '');
+          const mime = file.type || 'image/jpeg';
+          const image_base64 = dataUrl;
+          await api('/hq/tickets/' + encodeURIComponent(id) + '/photos', {
+            method: 'POST',
+            body: JSON.stringify({ side, slot, image_base64, mime })
+          });
+          toast('사진 업로드');
+          openTicket(id);
+        } catch (e) { toast(e.message, true); }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ----- Schedule -----
+    async function loadSchedule() {
+      const box = document.getElementById('scheduleList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        if (!staffCache.length) {
+          try { staffCache = await api('/hq/users'); } catch (_) { staffCache = []; }
+        }
+        const nameOf = (id) => {
+          const u = (staffCache || []).find((x) => x.user_id === id);
+          return u ? (u.name || u.login) : (id || '미배정');
+        };
+        const day = new Date().toISOString().slice(0, 10);
+        const data = await api('/hq/schedule?date=' + encodeURIComponent(day));
+        const scheduled = data.tickets || [];
+        const conflicts = data.conflicts || [];
+        let html = '';
+        if (conflicts.length) {
+          html += '<div class="empty" style="border-color:#ff6b7a;color:#ff8a95;">충돌 경고 ' +
+            conflicts.length + '건 (동일 담당·동일 시각 — 차단 아님)</div>';
+        }
+        if (!scheduled.length) {
+          box.innerHTML = html + '<div class="empty">오늘(' + esc(day) + ') 예정 없음</div>';
+          return;
+        }
+        const groups = {};
+        scheduled.forEach((t) => {
+          const key = t.assignee_id || '';
+          if (!groups[key]) groups[key] = [];
+          groups[key].push(t);
+        });
+        html += Object.keys(groups).map((aid) =>
+          '<div class="sched-group"><h4>' + esc(nameOf(aid)) + ' (' + groups[aid].length + ')</h4>' +
+          '<table class="data"><thead><tr><th>일정</th><th>번호</th><th>상태</th><th>증상</th></tr></thead><tbody>' +
+          groups[aid].map((t) =>
+            '<tr class="clickable" data-id="' + esc(t.ticket_id) + '">' +
+            '<td class="mono">' + esc(t.scheduled_at) + '</td>' +
+            '<td class="mono">' + esc(t.number || t.ticket_id) + '</td>' +
+            '<td>' + statusBadge(t.status) + '</td>' +
+            '<td>' + esc(t.symptom || '') + '</td></tr>'
+          ).join('') + '</tbody></table></div>'
+        ).join('');
+        box.innerHTML = html;
+        box.querySelectorAll('tr.clickable').forEach((tr) => {
+          tr.addEventListener('click', () => openTicket(tr.dataset.id));
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    // ----- Customers -----
+    async function loadCustomers() {
+      const phone = document.getElementById('custSearchPhone').value.trim();
+      const box = document.getElementById('customersList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const q = phone ? ('?phone=' + encodeURIComponent(phone)) : '';
+        const rows = await api('/hq/customers' + q);
+        if (!rows.length) {
+          box.innerHTML = '<div class="empty">고객 없음</div>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr><th>상호</th><th>유형</th><th>전화</th><th>담당</th><th>주소</th></tr></thead><tbody>' +
+          rows.map((c) =>
+            '<tr class="clickable" data-id="' + esc(c.customer_id) + '">' +
+            '<td>' + esc(c.display_name) + '</td>' +
+            '<td class="mono">' + esc(c.type || '') + '</td>' +
+            '<td class="mono">' + esc(c.primary_phone) + '</td>' +
+            '<td>' + esc(c.contact_name || '-') + '</td>' +
+            '<td>' + esc(c.address || '-') + '</td></tr>'
+          ).join('') + '</tbody></table>';
+        box.querySelectorAll('tr.clickable').forEach((tr) => {
+          tr.addEventListener('click', () => openCustomerHub(tr.dataset.id));
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    // ----- Equipment -----
+    async function loadEquipmentPanel() {
+      const cid = document.getElementById('eqSearchCustomer').value.trim();
+      const box = document.getElementById('equipmentList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const q = cid ? ('?customer_id=' + encodeURIComponent(cid)) : '';
+        const rows = await api('/hq/equipment' + q);
+        if (!rows.length) {
+          box.innerHTML = '<div class="empty">장비 없음</div>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr><th>이름</th><th>모델</th><th>시리얼</th><th>고객</th><th>보증</th><th>위치</th></tr></thead><tbody>' +
+          rows.map((e) =>
+            '<tr><td>' + esc(e.name) + '</td>' +
+            '<td class="mono">' + esc(e.model || '-') + '</td>' +
+            '<td class="mono">' + esc(e.serial || '-') + '</td>' +
+            '<td class="mono">' + esc(e.customer_id) + '</td>' +
+            '<td class="mono">' + esc(e.warranty_until || '-') + '</td>' +
+            '<td>' + esc(e.location_note || '-') + '</td></tr>'
+          ).join('') + '</tbody></table>';
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    // ----- Users -----
+    async function loadUsers() {
+      const box = document.getElementById('usersList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const rows = await api('/hq/users');
+        staffCache = rows;
+        if (!rows.length) {
+          box.innerHTML = '<div class="empty">직원 없음</div>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr><th>이름</th><th>로그인</th><th>역할</th><th>상태</th><th></th></tr></thead><tbody>' +
+          rows.map((u) => {
+            const st = u.employment_status || 'active';
+            return '<tr><td>' + esc(u.name || '') + '</td>' +
+              '<td class="mono">' + esc(u.login || '') + '</td>' +
+              '<td class="mono">' + esc(u.role || '') + '</td>' +
+              '<td>' + (st === 'active'
+                ? '<span class="badge badge-ok">active</span>'
+                : '<span class="badge badge-muted">' + esc(st) + '</span>') + '</td>' +
+              '<td>' + (st === 'active'
+                ? '<button type="button" class="btn btn-sm btn-danger" data-leave="' + esc(u.user_id) + '">휴직 처리</button>'
+                : '<button type="button" class="btn btn-sm" data-activate="' + esc(u.user_id) + '">복직</button>') +
+              '</td></tr>';
+          }).join('') + '</tbody></table>';
+        box.querySelectorAll('[data-leave]').forEach((b) => {
+          b.addEventListener('click', () => setEmployment(b.dataset.leave, 'leave'));
+        });
+        box.querySelectorAll('[data-activate]').forEach((b) => {
+          b.addEventListener('click', () => setEmployment(b.dataset.activate, 'active'));
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function setEmployment(id, employment_status) {
+      try {
+        // server route is PUT /hq/users/:id
+        await api('/hq/users/' + encodeURIComponent(id), {
+          method: 'PUT',
+          body: JSON.stringify({ employment_status })
+        });
+        toast('상태 변경: ' + employment_status);
+        loadUsers();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function stubCreateUser() {
+      const login = prompt('로그인 ID');
+      if (!login) return;
+      const name = prompt('이름');
+      if (!name) return;
+      try {
+        await api('/hq/users', {
+          method: 'POST',
+          body: JSON.stringify({ login, name, password: 'tech123', role: 'technician' })
+        });
+        toast('직원 등록: ' + name);
+        loadUsers();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function loadSettings() {
+      const box = document.getElementById('settingsBody');
+      try {
+        const s = await api('/hq/settings');
+        box.innerHTML = '<table class="data"><tbody>' +
+          Object.keys(s).map((k) =>
+            '<tr><td class="mono">' + esc(k) + '</td><td>' + esc(String(s[k])) + '</td></tr>'
+          ).join('') + '</tbody></table>';
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function loadMall() {
+      const box = document.getElementById('mallList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const rows = await api('/hq/products');
+        box.innerHTML = rows.length
+          ? '<table class="data"><thead><tr><th>이름</th><th>카테고리</th><th>단가</th><th>원가</th><th>SKU</th></tr></thead><tbody>' +
+            rows.map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.category) + '</td><td class="mono">' +
+              esc(p.sale_price) + '</td><td class="mono">' + esc(p.cost_price) + '</td><td class="mono">' +
+              esc(p.sku) + '</td></tr>').join('') + '</tbody></table>'
+          : '<div class="empty">상품 없음</div>';
+      } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+    }
+    async function createProduct() {
+      const name = prompt('상품명'); if (!name) return;
+      const sale_price = Number(prompt('판매단가', '10000') || 0);
+      try {
+        await api('/hq/products', { method: 'POST', body: JSON.stringify({ name, sale_price, category: '부품' }) });
+        toast('상품 등록'); loadMall();
+      } catch (e) { toast(e.message, true); }
+    }
+    async function loadRegions() {
+      const box = document.getElementById('regionsList');
+      try {
+        const rows = await api('/hq/regions');
+        box.innerHTML = '<table class="data"><thead><tr><th>이름</th><th>광역</th><th>출장비</th><th>상태</th></tr></thead><tbody>' +
+          rows.map((r) => '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.metro) + '</td><td class="mono">' +
+            esc(r.travel_fee) + '</td><td>' + esc(r.status) + '</td></tr>').join('') + '</tbody></table>';
+      } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+    }
+    async function createRegion() {
+      const name = prompt('권역명 (예: 서울-송파)'); if (!name) return;
+      const travel_fee = Number(prompt('출장비', '30000') || 0);
+      try {
+        await api('/hq/regions', { method: 'POST', body: JSON.stringify({ name, metro: name.split('-')[0] || name, travel_fee }) });
+        toast('권역 저장'); loadRegions();
+      } catch (e) { toast(e.message, true); }
+    }
+    async function loadUnpaid() {
+      const box = document.getElementById('settleList');
+      try {
+        const rows = await api('/hq/unpaid');
+        box.innerHTML = '<h4>미수</h4>' + (rows.length
+          ? '<table class="data"><thead><tr><th>티켓</th><th>상태</th><th>출장비</th><th>수금</th></tr></thead><tbody>' +
+            rows.map((r) => '<tr><td class="mono">' + esc(r.ticket_id) + '</td><td>' + esc(r.settlement_status) +
+              '</td><td>' + esc(r.travel_fee) + '</td><td>' + esc(r.settlement_paid) + '</td></tr>').join('') +
+            '</tbody></table>'
+          : '<div class="empty">미수 없음</div>');
+      } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+    }
+    async function loadExpenses() {
+      const box = document.getElementById('settleList');
+      try {
+        const rows = await api('/hq/expenses');
+        box.innerHTML = '<h4>경비</h4><table class="data"><thead><tr><th>금액</th><th>항목</th><th>상태</th><th></th></tr></thead><tbody>' +
+          rows.map((e) => '<tr><td>' + esc(e.amount) + '</td><td>' + esc(e.category) + '</td><td>' + esc(e.status) +
+            '</td><td>' + (e.status === 'pending'
+              ? '<button class="btn btn-sm" data-ap="' + esc(e.expense_id) + '">승인</button>'
+              : '') + '</td></tr>').join('') + '</tbody></table>';
+        box.querySelectorAll('[data-ap]').forEach((b) => b.addEventListener('click', async () => {
+          await api('/hq/expenses/' + b.dataset.ap + '/decide', { method: 'POST', body: JSON.stringify({ status: 'approved' }) });
+          toast('승인'); loadExpenses();
+        }));
+      } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+    }
+    async function createExpense() {
+      const amount = Number(prompt('금액') || 0);
+      try {
+        await api('/hq/expenses', { method: 'POST', body: JSON.stringify({ amount, category: '기타', memo: '본사입력' }) });
+        toast('경비 신청'); loadExpenses();
+      } catch (e) { toast(e.message, true); }
+    }
+    async function loadPayroll() {
+      const box = document.getElementById('settleList');
+      try {
+        const rows = await api('/hq/payroll');
+        box.innerHTML = '<h4>급여</h4><table class="data"><thead><tr><th>월</th><th>직원</th><th>기본</th><th>수당</th><th>공제</th><th>총액</th></tr></thead><tbody>' +
+          rows.map((p) => '<tr><td>' + esc(p.year_month) + '</td><td class="mono">' + esc(p.user_id) + '</td><td>' +
+            esc(p.base_pay) + '</td><td>' + esc(p.allowances) + '</td><td>' + esc(p.deductions) + '</td><td><b>' +
+            esc(p.total) + '</b></td></tr>').join('') + '</tbody></table>';
+      } catch (e) { box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; }
+    }
+    async function createPayroll() {
+      const user_id = prompt('직원 user_id'); if (!user_id) return;
+      const year_month = prompt('YYYY-MM', new Date().toISOString().slice(0, 7));
+      const base_pay = Number(prompt('기본급', '3000000') || 0);
+      const allowances = Number(prompt('수당', '0') || 0);
+      const deductions = Number(prompt('공제', '0') || 0);
+      try {
+        await api('/hq/payroll', { method: 'POST', body: JSON.stringify({ user_id, year_month, base_pay, allowances, deductions }) });
+        toast('급여 저장'); loadPayroll();
+      } catch (e) { toast(e.message, true); }
+    }
+    async function loadReport(kind) {
+      try {
+        const d = await api('/hq/reports?kind=' + encodeURIComponent(kind || 'daily'));
+        document.getElementById('reportOut').textContent = d.csv || JSON.stringify(d, null, 2);
+      } catch (e) { document.getElementById('reportOut').textContent = e.message; }
+    }
+
+    // ----- Followup -----
+    async function loadFollowup() {
+      const box = document.getElementById('followupList');
+      box.innerHTML = '<div class="loading-box">로딩…</div>';
+      try {
+        const filtered = await api('/hq/followups');
+        if (!filtered.length) {
+          box.innerHTML = '<div class="empty">사후 대상 없음</div>';
+          return;
+        }
+        box.innerHTML = '<table class="data"><thead><tr><th>번호</th><th>상태</th><th>사유</th><th>증상</th><th>완료</th></tr></thead><tbody>' +
+          filtered.map((t) => {
+            const reasons = [];
+            if (t.status === 'followup') reasons.push('사후');
+            if (truthyFlag(t.photo_incomplete)) reasons.push('사진미완');
+            if ((t.followup_status || '') === 'pending') reasons.push('pending');
+            return '<tr class="clickable" data-id="' + esc(t.ticket_id) + '">' +
+              '<td class="mono">' + esc(t.number || t.ticket_id) + '</td>' +
+              '<td>' + statusBadge(t.status) + '</td>' +
+              '<td class="mono">' + esc(reasons.join(', ')) + '</td>' +
+              '<td>' + esc(t.symptom || '') + '</td>' +
+              '<td class="mono">' + esc(t.completed_at || '-') + '</td></tr>';
+          }).join('') + '</tbody></table>';
+        box.querySelectorAll('tr.clickable').forEach((tr) => {
+          tr.addEventListener('click', () => openTicket(tr.dataset.id));
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    // boot
+    document.getElementById('userName').textContent = user.name || user.login || '사용자';
+    document.getElementById('userRole').textContent = (user.role || '-') + ' · ' + (user.company_id || '');
+    document.getElementById('deskPhone').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') deskSearch();
+    });
+    document.getElementById('custSearchPhone').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadCustomers();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { closeModal(); closeDrawer(); }
+    });
+
+    showPanel('dashboard');
+  </script>
+</body>
+</html>
