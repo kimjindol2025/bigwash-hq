@@ -689,7 +689,7 @@
                         "slot" (get $row "slot")
                         "mime" $mime
                         "data_url" $data-url}))
-            (catch $e (json-err 500 (str "photo read failed: " $e))))))))
+            (catch $e (json-err 500 (str "photo read failed: " $e)))))))))
 
 (defn dash-cache-path [$company]
   (str "/tmp/bigwash-hq-dash-" $company ".json"))
