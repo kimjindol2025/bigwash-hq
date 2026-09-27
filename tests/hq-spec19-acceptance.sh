@@ -86,7 +86,7 @@ PAY=$(curl -sS -X POST "$BASE/hq/payroll" -H "$AUTH" -H 'content-type: applicati
   -d "{\"user_id\":\"$IDA\",\"year_month\":\"$YM\",\"base_pay\":3000000,\"allowances\":200000,\"deductions\":50000}")
 echo "$PAY" | j 'assert d.get("total")==3150000'
 REP=$(curl -sS "$BASE/hq/reports?kind=monthly" -H "$AUTH")
-echo "$REP" | j 'assert "payroll_total" in d.get("csv","") and d.get("csv","").startswith("year_month")'
+echo "$REP" | j 'assert "급여총액" in d.get("csv","") and int(d["summary"]["payroll_total"])>=3150000'
 PLIST=$(curl -sS "$BASE/hq/payroll?year_month=$YM" -H "$AUTH")
 echo "$PLIST" | j "assert any(x.get('user_id')=='$IDA' and x.get('total')==3150000 for x in d)"
 pass "8 payroll total 3150000 in ledger + monthly csv"

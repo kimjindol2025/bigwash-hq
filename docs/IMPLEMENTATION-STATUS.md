@@ -41,15 +41,20 @@ API: `GET /hq/settlements?tab=unpaid|collected`, `GET/POST /hq/expenses`(+decide
 - 티켓: `/hq/tickets/:id/bundle` 1회 로딩
 - 참조데이터(직원·권역·상품) 60초 클라이언트 캐시
 
+## HQ 1차 패치
+
+완료. 부분수금은 모달(받은금액·수단), 스케줄 부여는 날짜 옆 시간 입력(방문시각 prompt 없음). 용병 이름은 `hq_ticket_assignees` 기준으로 선택 인원 일정에 표시. 급여 블록·상품 원가는 경리·관리자(`admin`/`finance`/`accountant`)만. 직원 앱은 별 레포.
+
 ## 테스트
 
 ```bash
-npm run test:hq19   # 1–10
-npm run test:hq20   # 11–20
+npm test             # hq19 + hq20 + hq-money
+npm run test:hq19    # 1–10
+npm run test:hq20    # 11–20
+npm run test:money   # 돈 모듈 손테스트 1–8
 ```
 
 ## 아직 얇은 점
 
-- UI E2E 스위트 없음 (손테스트 기준)
+- 브라우저 클릭 스위트 없음 (돈 모듈은 API 스위트)
 - 명세 PNG는 세로 템플릿 + 동일 content (고품질 텍스트 래스터 합성은 후속)
-- 역할별 화면 숨김 UX는 부분적 (급여 편집은 경리·관리자 게이트 적용)

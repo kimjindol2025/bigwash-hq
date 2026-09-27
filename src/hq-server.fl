@@ -821,8 +821,18 @@
                                                     "warning" "same assignee same datetime"}])
                                      $acc)))
                                []
-                               $rows)]
-        (json-ok {"date" $day "tickets" $rows "conflicts" $conflicts})))))
+                               $rows)
+            $asg-res (db-request "POST" "/v2/query" AFLDB_READ_KEY
+                                 {"table" "hq_ticket_assignees"
+                                  "where" {"company_id" $company}
+                                  "limit" 500})
+            $all-asg (db-rows $asg-res)
+            $enriched (map (fn [$t]
+                             (let [$tid (get $t "ticket_id")
+                                   $mine (filter (fn [$a] (= (get $a "ticket_id") $tid)) $all-asg)]
+                               (assoc $t "assignees" $mine)))
+                           $rows)]
+        (json-ok {"date" $day "tickets" $enriched "conflicts" $conflicts})))))
 
 (defn handle-settings [$req]
   (let [$gate (require-user $req)]

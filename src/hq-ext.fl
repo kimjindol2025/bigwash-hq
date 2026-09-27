@@ -45,7 +45,10 @@
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (json-ok (db-rows (db-query "hq_products" {"company_id" (cid $gate)}))))))
+      (let [$rows (db-rows (db-query "hq_products" {"company_id" (cid $gate)}))]
+        (if (can-edit-money? $gate)
+          (json-ok $rows)
+          (json-ok (map (fn [$p] (assoc $p "cost_price" "")) $rows)))))))
 
 (defn handle-product-create [$req]
   (let [$gate (require-user $req)]
@@ -65,7 +68,7 @@
                       "spec" (?? (get $body "spec") "")
                       "sku" (?? (get $body "sku") "")
                       "sale_price" $price
-                      "cost_price" (?? (get $body "cost_price") 0)
+                      "cost_price" (if (can-edit-money? $gate) (?? (get $body "cost_price") 0) 0)
                       "unit" (?? (get $body "unit") "EA")
                       "status" (?? (get $body "status") "active")
                       "description" (str "fulfill_type=" (?? (get $body "fulfill_type") "part")
@@ -337,7 +340,7 @@
 
 (defn can-edit-money? [$gate]
   (let [$r (?? (get (get $gate "user") "role") "")]
-    (or (= $r "admin") (= $r "accountant") (= $r "finance") (= $r "manager"))))
+    (or (= $r "admin") (= $r "accountant") (= $r "finance"))))
 
 (defn doc-total-for-ticket [$tid]
   (let [$docs (db-rows (db-query "hq_documents" {"ticket_id" $tid}))]

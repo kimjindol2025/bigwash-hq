@@ -7,9 +7,10 @@
     "provision": "bash scripts/provision-hq.sh && bash scripts/provision-hq-ext.sh",
     "start": "bash scripts/run-afj.sh",
     "dev": "bash scripts/run-afj.sh",
-    "test": "bash tests/hq-spec19-acceptance.sh && bash tests/hq-spec20-acceptance.sh",
+    "test": "bash tests/hq-spec19-acceptance.sh && bash tests/hq-spec20-acceptance.sh && bash tests/hq-money.sh",
     "test:hq19": "bash tests/hq-spec19-acceptance.sh",
     "test:hq20": "bash tests/hq-spec20-acceptance.sh",
+    "test:money": "bash tests/hq-money.sh",
     "start:legacy-node": "node legacy/server.js",
     "test:legacy": "node tests/run.js"
   },
