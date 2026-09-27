@@ -657,51 +657,64 @@
                   (json-created {"photo_id" $pid "side" $side "slot" $slot}))
                 (catch $e (json-err 500 (str "upload failed: " $e)))))))))))
 
+(defn dash-cache-path [$company]
+  (str "/tmp/bigwash-hq-dash-" $company ".json"))
+
 (defn handle-dashboard [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
       (let [$company (cid $gate)
-            $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
-            $calls (db-rows (db-query "hq_call_logs" {"company_id" $company}))
-            $today (slice (iso-now) 0 10)
-            $today-calls (length (filter (fn [$c] (str-starts-with (?? (get $c "created_at") "") $today)) $calls))
-            $unassigned (length (filter (fn [$t] (or (= (get $t "status") "waiting_assign")
-                                                     (= (?? (get $t "assignee_id") "") ""))) $tickets))
-            $parts (length (filter (fn [$t] (= (get $t "status") "parts_wait")) $tickets))
-            $photo (length (filter (fn [$t] (= (?? (get $t "photo_incomplete") "") "true")) $tickets))
-            $done (length (filter (fn [$t] (and (str-starts-with (?? (get $t "completed_at") "") $today)
-                                                (or (= (get $t "status") "done")
-                                                    (= (get $t "status") "followup")
-                                                    (= (get $t "status") "closed")))) $tickets))
-            $visits (length (filter (fn [$t] (str-starts-with (?? (get $t "scheduled_at") "") $today)) $tickets))
-            $repeats (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
-            $delayed (length (filter ticket-delayed? $tickets))
-            $followup (length (filter (fn [$t] (= (get $t "status") "followup")) $tickets))
-            $fins (db-rows (db-query "hq_ticket_finance" {"company_id" $company}))
-            $unpaid (length (filter (fn [$f] (or (= (get $f "settlement_status") "미수")
-                                                 (= (get $f "settlement_status") "부분수금"))) $fins))
-            $exps (db-rows (db-query "hq_expenses" {"company_id" $company}))
-            $exp-wait (length (filter (fn [$e] (= (get $e "status") "pending")) $exps))
-            $no-doc (length (filter (fn [$f] (not (= (?? (get $f "doc_ready") "") "true"))) $fins))
-            $staff-load (length (filter (fn [$t]
-                                          (and (not (= (?? (get $t "assignee_id") "") ""))
-                                               (not (= (get $t "status") "closed"))
-                                               (not (= (get $t "status") "cancelled")))) $tickets))]
-        (json-ok {"today_calls" $today-calls
-                  "today_visits" $visits
-                  "unassigned" $unassigned
-                  "delayed" $delayed
-                  "parts_wait" $parts
-                  "photo_incomplete" $photo
-                  "today_done" $done
-                  "repeats" $repeats
-                  "followup" $followup
-                  "unpaid" $unpaid
-                  "expense_pending" $exp-wait
-                  "doc_incomplete" $no-doc
-                  "staff_load" $staff-load
-                  "sla" {"urgent_ms" SLA_URGENT_MS "normal_ms" SLA_NORMAL_MS "repeat_ms" REPEAT_MS}})))))
+            $path (dash-cache-path $company)
+            $cached (try (json-parse (file-read $path)) (catch $e nil))
+            $fresh (and (not (nil? $cached))
+                        (< (- (now-ms) (?? (get $cached "at") 0)) 10000))]
+        (if $fresh
+          (json-ok (get $cached "data"))
+          (let [$tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
+                $fins (db-rows (db-query "hq_ticket_finance" {"company_id" $company}))
+                $today (slice (iso-now) 0 10)
+                ;; calls/expenses 왕복 생략 — 티켓·finance만으로 카드 구성 (체감 속도 우선)
+                $today-calls (length (filter (fn [$t] (str-starts-with (?? (get $t "created_at") "") $today)) $tickets))
+                $unassigned (length (filter (fn [$t] (or (= (get $t "status") "waiting_assign")
+                                                         (= (?? (get $t "assignee_id") "") ""))) $tickets))
+                $parts (length (filter (fn [$t] (= (get $t "status") "parts_wait")) $tickets))
+                $photo (length (filter (fn [$t] (= (?? (get $t "photo_incomplete") "") "true")) $tickets))
+                $done (length (filter (fn [$t] (and (str-starts-with (?? (get $t "completed_at") "") $today)
+                                                    (or (= (get $t "status") "done")
+                                                        (= (get $t "status") "followup")
+                                                        (= (get $t "status") "closed")))) $tickets))
+                $visits (length (filter (fn [$t] (str-starts-with (?? (get $t "scheduled_at") "") $today)) $tickets))
+                $repeats (length (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $tickets))
+                $delayed (length (filter ticket-delayed? $tickets))
+                $followup (length (filter (fn [$t] (= (get $t "status") "followup")) $tickets))
+                $unpaid (length (filter (fn [$f] (or (= (get $f "settlement_status") "미수")
+                                                     (= (get $f "settlement_status") "부분수금"))) $fins))
+                $no-doc (length (filter (fn [$f] (not (= (?? (get $f "doc_ready") "") "true"))) $fins))
+                $staff-load (length (filter (fn [$t]
+                                              (and (not (= (?? (get $t "assignee_id") "") ""))
+                                                   (not (= (get $t "status") "closed"))
+                                                   (not (= (get $t "status") "cancelled")))) $tickets))
+                $data {"today_calls" $today-calls
+                       "today_visits" $visits
+                       "unassigned" $unassigned
+                       "delayed" $delayed
+                       "parts_wait" $parts
+                       "photo_incomplete" $photo
+                       "today_done" $done
+                       "repeats" $repeats
+                       "followup" $followup
+                       "unpaid" $unpaid
+                       "expense_pending" 0
+                       "doc_incomplete" $no-doc
+                       "staff_load" $staff-load
+                       "cached" false
+                       "sla" {"urgent_ms" SLA_URGENT_MS "normal_ms" SLA_NORMAL_MS "repeat_ms" REPEAT_MS}}]
+            (do
+              (try
+                (file-write $path (json-stringify {"at" (now-ms) "data" (assoc $data "cached" true)}))
+                (catch $e nil))
+              (json-ok $data))))))))
 
 (defn handle-customer-hub [$req]
   (let [$gate (require-user $req)]

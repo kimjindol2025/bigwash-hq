@@ -281,8 +281,7 @@
   }
 
   // ----- Dashboard -----
-  async function renderDashboard() {
-    const d = await api('/hq/dashboard');
+  function paintDashboard(d) {
     const cards = [
       ['today_calls','오늘 콜','desk'],
       ['today_visits','오늘 출장','schedule'],
@@ -311,10 +310,33 @@
       '<div class="actions">' +
       '<button class="btn btn-primary" type="button" id="goDesk">전화 데스크</button>' +
       '<button class="btn" type="button" id="goUnassigned">미지정 큐</button>' +
-      '<button class="btn" type="button" id="goUnpaid">미수 목록</button></div>';
+      '<button class="btn" type="button" id="goUnpaid">미수 목록</button></div>' +
+      (d.cached ? '<div class="muted mono" style="margin-top:8px;font-size:11px">cached</div>' : '');
     document.getElementById('goDesk').onclick = () => showPanel('desk');
     document.getElementById('goUnassigned').onclick = () => { showPanel('board'); renderBoard('waiting_assign'); };
     document.getElementById('goUnpaid').onclick = () => { showPanel('settle'); renderSettle('unpaid'); };
+  }
+
+  async function renderDashboard() {
+    const cacheKey = 'hq_dash_cache_v2';
+    const now = Date.now();
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.at && (now - parsed.at) < 15000) {
+          paintDashboard(parsed.data);
+          api('/hq/dashboard').then((fresh) => {
+            sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: fresh }));
+            paintDashboard(fresh);
+          }).catch(() => {});
+          return;
+        }
+      }
+    } catch (_) {}
+    const d = await api('/hq/dashboard');
+    try { sessionStorage.setItem(cacheKey, JSON.stringify({ at: now, data: d })); } catch (_) {}
+    paintDashboard(d);
   }
 
   // ----- Desk -----
