@@ -358,23 +358,25 @@
     (> (length $hits) 0)))
 
 (defn ticket-delayed? [$t]
+  ;; DB 추가조회 없이 티켓 필드만으로 판정 (대시보드 N+1 방지)
   (let [$st (get $t "status")
         $open (and (not (= $st "closed")) (not (= $st "cancelled")))
         $unassigned (or (= $st "waiting_assign") (= (?? (get $t "assignee_id") "") ""))
-        $m (meta-get (get $t "ticket_id"))
-        $created (if (nil? $m) 0 (?? (get $m "created_ms") 0))
-        $now (now-ms)
         $urg (?? (get $t "urgency") "normal")
-        $limit (if (= $urg "urgent") SLA_URGENT_MS SLA_NORMAL_MS)
-        $sched (?? (get $t "scheduled_at") "")
+        $created-day (slice (?? (get $t "created_at") "") 0 10)
         $today (slice (iso-now) 0 10)
+        $sched (?? (get $t "scheduled_at") "")
         $past-visit (and (not (= $sched ""))
-                         (< $sched $today)
+                         (< (slice $sched 0 10) $today)
                          $open
                          (not (= $st "done"))
-                         (not (= $st "followup")))]
-    (or $past-visit
-        (and $open $unassigned (> $created 0) (> (- $now $created) $limit)))))
+                         (not (= $st "followup"))
+                         (not (= $st "closed")))
+        ;; 긴급: 미배정이면 당일부터 지연으로 표시 / 일반: 생성일이 오늘 이전이면 지연
+        $late-unassigned (and $open $unassigned
+                              (or (= $urg "urgent")
+                                  (and (not (= $created-day "")) (< $created-day $today))))]
+    (or $past-visit $late-unassigned)))
 
 (defn handle-ticket-create [$req]
   (let [$gate (require-user $req)]
@@ -477,6 +479,35 @@
             (json-ok {"ticket" $t
                       "events" (reverse (sort-by (fn [$e] (get $e "at")) $events))
                       "photos" $photos})))))))
+
+(defn handle-ticket-bundle [$req]
+  ;; 서랍 1회 로딩용: 티켓+관련 데이터 묶음
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $t (db-row (db-get-row "hq_tickets" $id))]
+        (if (or (nil? $t) (not (= (get $t "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (let [$cid (get $t "customer_id")
+                $eid (get $t "equipment_id")
+                $events (db-rows (db-query "hq_ticket_events" {"ticket_id" $id}))
+                $photos (db-rows (db-query "hq_photos" {"ticket_id" $id}))
+                $fin (finance-get $id)
+                $asg (db-rows (db-query "hq_ticket_assignees" {"ticket_id" $id}))
+                $cart (db-rows (db-query "hq_cart_lines" {"ticket_id" $id}))
+                $cust (db-row (db-get-row "hq_customers" $cid))
+                $extra (db-row (db-get-row "hq_customer_extra" $cid))
+                $eq (db-row (db-get-row "hq_equipment" $eid))]
+            (json-ok {"ticket" $t
+                      "events" (reverse (sort-by (fn [$e] (get $e "at")) $events))
+                      "photos" $photos
+                      "finance" $fin
+                      "assignees" $asg
+                      "cart" $cart
+                      "customer" $cust
+                      "extra" (if (nil? $extra) {"region_id" ""} $extra)
+                      "equipment" $eq})))))))
 
 (defn handle-ticket-assign [$req]
   (let [$gate (require-user $req)]
@@ -800,6 +831,7 @@
 (server-get "/hq/tickets" "handle-tickets-list")
 (server-post "/hq/tickets" "handle-ticket-create")
 (server-get "/hq/tickets/:id" "handle-ticket-get")
+(server-get "/hq/tickets/:id/bundle" "handle-ticket-bundle")
 (server-post "/hq/tickets/:id/assign" "handle-ticket-assign")
 (server-post "/hq/tickets/:id/schedule" "handle-ticket-schedule")
 (server-post "/hq/tickets/:id/transition" "handle-ticket-transition")

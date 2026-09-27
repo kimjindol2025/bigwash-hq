@@ -226,13 +226,28 @@
     refresh();
   }
 
+  const _cache = { staff: null, regions: null, products: null, contractors: null, at: 0 };
+  const CACHE_MS = 60000;
+  async function cached(key, path) {
+    const now = Date.now();
+    if (_cache[key] && (now - _cache.at) < CACHE_MS) return _cache[key];
+    _cache[key] = await api(path);
+    _cache.at = now;
+    return _cache[key];
+  }
   async function loadStaff() {
-    staff = await api('/hq/users?assignable=1');
+    staff = await cached('staff', '/hq/users?assignable=1');
     return staff;
   }
   async function loadRegions() {
-    regions = await api('/hq/regions');
+    regions = await cached('regions', '/hq/regions');
     return regions;
+  }
+  async function loadProducts() {
+    return cached('products', '/hq/products');
+  }
+  async function loadContractors() {
+    return cached('contractors', '/hq/contractors');
   }
   function staffOptions(selected) {
     return '<option value="">미배정</option>' + staff.map((u) =>
@@ -582,40 +597,30 @@
     const rows = await api('/hq/tickets' + q);
     const box = document.getElementById('blist');
     if (!rows.length) { box.innerHTML = '<div class="empty">티켓 없음</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>정산</th><th>증상</th><th>담당</th></tr></thead><tbody>' +
+    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>담당</th></tr></thead><tbody>' +
       rows.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) +
-        '</td><td>' + badge(t.status) + '</td><td class="settle-cell" data-tid="' + esc(t.ticket_id) + '">…</td><td>' + esc(t.symptom) +
+        '</td><td>' + badge(t.status) + '</td><td>' + esc(t.symptom) +
         '</td><td class="mono">' + esc(t.assignee_id || '-') + '</td></tr>').join('') + '</tbody></table>';
     box.querySelectorAll('tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
-    // load settle badges
-    for (const cell of box.querySelectorAll('.settle-cell')) {
-      api('/hq/tickets/' + cell.dataset.tid + '/finance').then((f) => {
-        cell.textContent = f.settlement_status || '-';
-      }).catch(() => { cell.textContent = '-'; });
-    }
   }
 
 
   async function openTicket(id) {
-    await Promise.all([loadStaff(), loadRegions()]);
-    const data = await api('/hq/tickets/' + encodeURIComponent(id));
-    const fin = await api('/hq/tickets/' + encodeURIComponent(id) + '/finance');
-    const contractors = await api('/hq/contractors').catch(() => []);
-    const products = await api('/hq/products').catch(() => []);
+    const [,, bundle, contractors, products] = await Promise.all([
+      loadStaff(), loadRegions(),
+      api('/hq/tickets/' + encodeURIComponent(id) + '/bundle'),
+      loadContractors().catch(() => []),
+      loadProducts().catch(() => [])
+    ]);
+    const data = bundle;
+    const fin = bundle.finance || {};
     currentTicket = data.ticket;
     const t = data.ticket;
     const next = NEXT[t.status] || [];
     const settleOpts = ['카드완납','계좌완납','현금완납','부분수금','미수','해당없음'];
-
-    let cust = {};
-    let extra = {};
-    try { cust = await api('/hq/customers/' + encodeURIComponent(t.customer_id)); } catch (_) {}
-    try { extra = await api('/hq/customers/' + encodeURIComponent(t.customer_id) + '/extra'); } catch (_) {}
-    let eq = {};
-    try {
-      const eqs = await api('/hq/equipment?customer_id=' + encodeURIComponent(t.customer_id));
-      eq = (eqs || []).find((e) => e.equipment_id === t.equipment_id) || {};
-    } catch (_) {}
+    const cust = bundle.customer || {};
+    const extra = bundle.extra || {};
+    const eq = bundle.equipment || {};
     const regionName = (regions.find((r) => r.region_id === (fin.region_id || extra.region_id)) || {}).name || (fin.region_id || '-');
 
     openDrawer(`
@@ -719,8 +724,11 @@
       });
     }
 
-    async function refreshAsgCart() {
-      const asg = await api('/hq/tickets/' + id + '/assignees');
+    let asgCache = bundle.assignees || [];
+    let cartCache = bundle.cart || [];
+    async function refreshAsgCart(force) {
+      const asg = force ? await api('/hq/tickets/' + id + '/assignees') : asgCache;
+      if (force) asgCache = asg;
       document.getElementById('dAsgList').innerHTML = (asg || []).length
         ? '<table><thead><tr><th>구분</th><th>이름/ID</th><th>주</th><th>일당</th></tr></thead><tbody>' +
           asg.map((a) => '<tr><td>' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td>' +
@@ -733,7 +741,8 @@
       const assignedIds = new Set((asg || []).filter((a) => a.kind === 'staff').map((a) => a.user_id));
       [...sel.options].forEach((o) => { o.selected = assignedIds.has(o.value); });
 
-      const cart = await api('/hq/tickets/' + id + '/cart');
+      const cart = force ? await api('/hq/tickets/' + id + '/cart') : cartCache;
+      if (force) cartCache = cart;
       const sum = (cart || []).reduce((s, l) => s + (Number(l.qty || 1) * Number(l.price || 0)), 0);
       document.getElementById('dCart').innerHTML = (cart || []).length
         ? '<table><thead><tr><th>구분</th><th>항목</th><th>수량</th><th>단가</th><th>금액</th></tr></thead><tbody>' +
@@ -746,16 +755,16 @@
         : '<div class="muted">장바구니 비어 있음 — 몰 부품을 담으세요</div>';
     }
 
-    async function refreshPhotos() {
-      const det = await api('/hq/tickets/' + id);
+    async function refreshPhotos(force) {
+      const det = force ? await api('/hq/tickets/' + id) : data;
       const photos = det.photos || [];
       document.getElementById('dPhotos').innerHTML = photos.length
         ? photos.map((p) => '<div class="badge" style="margin:2px">' + esc(p.side) + ' #' + esc(p.slot) + '</div>').join(' ')
         : '<span class="muted">사진 없음</span>';
     }
 
-    await refreshAsgCart();
-    await refreshPhotos();
+    await refreshAsgCart(true);
+    await refreshPhotos(true);
 
     document.getElementById('dAsgSave').onclick = async () => {
       const sel = [...document.getElementById('dAddStaff').selectedOptions].map((o) => o.value).filter(Boolean);
@@ -812,7 +821,7 @@
           price: Number(opt.getAttribute('data-price') || 0)
         })});
         await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
-        toast('장바구니에 담김'); closeModal(); refreshAsgCart();
+        toast('장바구니에 담김'); closeModal(); refreshAsgCart(true);
       };
     };
 
@@ -826,13 +835,13 @@
           kind: 'labor', name: document.getElementById('cln').value, qty: 1,
           price: Number(document.getElementById('clp').value || 0)
         })});
-        toast('공임 추가'); closeModal(); refreshAsgCart();
+        toast('공임 추가'); closeModal(); refreshAsgCart(true);
       };
     };
 
     document.getElementById('dCartTravel').onclick = async () => {
       await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
-      toast('출장비 동기화'); refreshAsgCart();
+      toast('출장비 동기화'); refreshAsgCart(true);
     };
 
     document.getElementById('dDoc').onclick = async () => {
@@ -892,7 +901,7 @@
             original_name: f.name
           })
         });
-        toast('사진 업로드'); refreshPhotos();
+        toast('사진 업로드'); refreshPhotos(true);
       } catch (e) { toast(e.message, true); }
     };
 
