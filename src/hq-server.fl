@@ -464,20 +464,71 @@
                         (add-event! $company $id (uid $gate) "assign" "" $status (str "지정:" $assignee)))
                       (json-created $row))))))))))))
 
+(defn field-write-denied? [$gate $tid]
+  (let [$role (?? (get (get $gate "user") "role") "")
+        $uid (uid $gate)]
+    (if (not (= $role "technician"))
+      false
+      (let [$t (db-row (db-get-row "hq_tickets" $tid))]
+        (if (or (nil? $t) (not (= (get $t "company_id") (cid $gate))))
+          true
+          (let [$asg (db-rows (db-query "hq_ticket_assignees" {"ticket_id" $tid}))]
+            (not (or (= (?? (get $t "assignee_id") "") $uid)
+                     (> (length (filter (fn [$a] (= (?? (get $a "user_id") "") $uid)) $asg)) 0)))))))))
+
+(defn mine-ticket-row [$t]
+  (let [$c (db-row (db-get-row "hq_customers" (?? (get $t "customer_id") "")))
+        $e (db-row (db-get-row "hq_equipment" (?? (get $t "equipment_id") "")))
+        $f (finance-get (get $t "ticket_id"))]
+    {"ticket_id" (get $t "ticket_id")
+     "number" (?? (get $t "number") "")
+     "status" (?? (get $t "status") "")
+     "scheduled_at" (?? (get $t "scheduled_at") "")
+     "symptom" (?? (get $t "symptom") "")
+     "customer_name" (if (nil? $c) "" (?? (get $c "display_name") ""))
+     "address" (if (nil? $c) "" (?? (get $c "address") ""))
+     "phone" (if (nil? $c) "" (?? (get $c "primary_phone") ""))
+     "equipment_name" (if (nil? $e) "" (?? (get $e "name") ""))
+     "settlement_status" (if (nil? $f) "" (?? (get $f "settlement_status") ""))}))
+
 (defn handle-tickets-list [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
       (let [$company (cid $gate)
+            $mine (?? (server-req-query $req "mine") "")
             $status (?? (server-req-query $req "status") "")
-            $assignee (?? (server-req-query $req "assignee_id") "")
-            $where (if (not (= $status ""))
-                     {"company_id" $company "status" $status}
-                     (if (not (= $assignee ""))
-                       {"company_id" $company "assignee_id" $assignee}
-                       {"company_id" $company}))
-            $rows (db-rows (db-query "hq_tickets" $where))]
-        (json-ok (reverse (sort-by (fn [$r] (get $r "created_at")) $rows)))))))
+            $assignee (?? (server-req-query $req "assignee_id") "")]
+        (if (= $mine "1")
+          (let [$uid (uid $gate)
+                $own (db-rows (db-query "hq_tickets" {"company_id" $company "assignee_id" $uid}))
+                $asg-res (db-request "POST" "/v2/query" AFLDB_READ_KEY
+                                     {"table" "hq_ticket_assignees"
+                                      "where" {"company_id" $company}
+                                      "limit" 500})
+                $asg (filter (fn [$a] (= (?? (get $a "user_id") "") $uid)) (db-rows $asg-res))
+                $extra (reduce (fn [$a $row]
+                                 (let [$id (?? (get $row "ticket_id") "")
+                                       $t (if (= $id "") nil (db-row (db-get-row "hq_tickets" $id)))]
+                                   (if (or (nil? $t) (not (= (get $t "company_id") $company)))
+                                     $a
+                                     (append $a [$t]))))
+                               []
+                               $asg)
+                $dedup (reduce (fn [$a $t]
+                                 (let [$id (get $t "ticket_id")
+                                       $hit (filter (fn [$x] (= (get $x "ticket_id") $id)) $a)]
+                                   (if (> (length $hit) 0) $a (append $a [$t]))))
+                               []
+                               (append $own $extra))]
+            (json-ok (map mine-ticket-row $dedup)))
+          (let [$where (if (not (= $status ""))
+                         {"company_id" $company "status" $status}
+                         (if (not (= $assignee ""))
+                           {"company_id" $company "assignee_id" $assignee}
+                           {"company_id" $company}))
+                $rows (db-rows (db-query "hq_tickets" $where))]
+            (json-ok (reverse (sort-by (fn [$r] (get $r "created_at")) $rows)))))))))
 
 (defn handle-ticket-get [$req]
   (let [$gate (require-user $req)]
@@ -588,7 +639,9 @@
             $t (db-row (db-get-row "hq_tickets" $id))]
         (if (nil? $t)
           (json-err 404 "Not found")
-          (let [$from (get $t "status")
+          (if (field-write-denied? $gate $id)
+            (json-err 403 "not your assignment")
+            (let [$from (get $t "status")
                 $has (not (= (?? (get $t "assignee_id") "") ""))]
             (if (not (can-transition? $from $to $has $cancel))
               (json-err 400 (str "invalid transition " $from " → " $to))
@@ -609,7 +662,7 @@
                   (if (or (= $to "done") (= $to "followup") (= $to "closed"))
                     (meta-set-completed! $id))
                   (add-event! (cid $gate) $id (uid $gate) "transition" $from $to $memo)
-                  (json-ok {"ticket_id" $id "status" $to "photo_incomplete" $photo-flag}))))))))))
+                  (json-ok {"ticket_id" $id "status" $to "photo_incomplete" $photo-flag})))))))))))
 
 (defn handle-call-create [$req]
   (let [$gate (require-user $req)]
@@ -643,10 +696,12 @@
             $slot (?? (get $body "slot") 0)
             $raw (?? (get $body "image_base64") "")
             $t (db-row (db-get-row "hq_tickets" $tid))]
-        (if (or (nil? $t)
-                (and (not (= $side "before")) (not (= $side "after")) (not (= $side "log")))
-                (< $slot 1) (> $slot 5) (= $raw ""))
-          (json-err 400 "side before|after|log, slot 1-5, image_base64 required")
+        (if (field-write-denied? $gate $tid)
+          (json-err 403 "not your assignment")
+          (if (or (nil? $t)
+                  (and (not (= $side "before")) (not (= $side "after")) (not (= $side "log")))
+                  (< $slot 1) (> $slot 5) (= $raw ""))
+            (json-err 400 "side before|after|log, slot 1-5, image_base64 required")
           (do
             (ensure-upload!)
             (let [$pid (new-id "pho")
@@ -668,7 +723,7 @@
                               "uploader_id" (uid $gate)
                               "uploaded_at" (iso-now)})
                   (json-created {"photo_id" $pid "side" $side "slot" $slot}))
-                (catch $e (json-err 500 (str "upload failed: " $e)))))))))))
+                (catch $e (json-err 500 (str "upload failed: " $e))))))))))))
 
 (defn handle-photo-content [$req]
   (let [$gate (require-user $req)]
@@ -931,7 +986,12 @@
 (server-post "/hq/tickets/:id/assignees" "handle-assignees-set")
 (server-get "/hq/tickets/:id/cart" "handle-cart-list")
 (server-post "/hq/tickets/:id/cart" "handle-cart-add")
+(server-post "/hq/tickets/:id/cart/qty" "handle-cart-qty")
 (server-post "/hq/tickets/:id/cart/sync-travel" "handle-cart-sync-travel")
+(server-post "/hq/tickets/:id/log" "handle-ticket-log")
+(server-post "/hq/me/password" "handle-me-password")
+(server-post "/hq/me/day-close" "handle-day-close")
+(server-get "/hq/me/day-close" "handle-day-close-get")
 (server-get "/hq/contractors" "handle-contractors-list")
 (server-post "/hq/contractors" "handle-contractor-create")
 

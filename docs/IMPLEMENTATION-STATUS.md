@@ -45,6 +45,8 @@ API: `GET /hq/settlements?tab=unpaid|collected`, `GET/POST /hq/expenses`(+decide
 
 완료. 부분수금은 모달(받은금액·수단), 스케줄 부여는 날짜 옆 시간 입력(방문시각 prompt 없음). 용병 이름은 `hq_ticket_assignees` 기준으로 선택 인원 일정에 표시. 급여 블록·상품 원가는 경리·관리자(`admin`/`finance`/`accountant`)만. 직원 앱은 별 레포.
 
+현장 화면은 이 레포에 없다. 수신만: `GET /hq/tickets?mine=1`(동행 포함), `POST /hq/tickets/:id/log`, `POST /hq/me/day-close`(`clock_out`|`return_hq`), `POST /hq/me/password`. 기사 역할은 자기 배정 티켓만 수정.
+
 ## 테스트
 
 ```bash

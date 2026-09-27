@@ -135,17 +135,27 @@
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$id (server-req-param $req "id")
-            $body (req-body $req)
+      (if (field-write-denied? $gate (server-req-param $req "id"))
+        (json-err 403 "not your assignment")
+        (let [$id (server-req-param $req "id")
+              $body0 (req-body $req)
+            $role (?? (get (get $gate "user") "role") "")
+            $body (if (= $role "technician")
+                    {"settlement_status" (?? (get $body0 "settlement_status") "")
+                     "settlement_paid" (?? (get $body0 "settlement_paid") 0)
+                     "settlement_method" (?? (get $body0 "settlement_method") "")}
+                    $body0)
             $region (?? (get $body "region_id") "")
             $fee (if (not (= $region ""))
                    (region-fee $region)
                    (?? (get $body "travel_fee") 0))
-            $patch (assoc (assoc $body "region_id" $region) "travel_fee" $fee)
+            $patch (if (= $role "technician")
+                     $body
+                     (assoc (assoc $body "region_id" $region) "travel_fee" $fee))
             $row (finance-upsert! (cid $gate) $id $patch)]
         (add-event! (cid $gate) $id (uid $gate) "finance" "" "" (str "권역/정산 갱신 fee=" $fee))
         (bust-dash-cache! (cid $gate))
-        (json-ok $row)))))
+        (json-ok $row))))))
 
 (defn handle-doc-issue [$req]
   ;; 직원발행 가정 — 본사가 티켓에 명세 생성·보관
@@ -159,7 +169,9 @@
             $fin (finance-get $tid)]
         (if (nil? $t)
           (json-err 404 "ticket not found")
-          (let [$lines (?? (get $body "lines") [])
+          (if (field-write-denied? $gate $tid)
+            (json-err 403 "not your assignment")
+            (let [$lines (?? (get $body "lines") [])
                 $labor (?? (get $body "labor_fee") 0)
                 $travel (?? (get $fin "travel_fee") 0)
                 $parts-sum (reduce (fn [$a $l] (+ $a (* (?? (get $l "qty") 1) (?? (get $l "price") 0)))) 0 $lines)
@@ -200,7 +212,7 @@
             (do
               (db-insert "hq_documents" $row)
               (finance-upsert! (cid $gate) $tid {"doc_ready" "true"})
-              (json-created $row))))))))
+              (json-created $row)))))))))
 
 (defn handle-docs-list [$req]
   (let [$gate (require-user $req)]
@@ -737,13 +749,22 @@
       (json-err (get $gate "status") (get $gate "error"))
       (json-ok (db-rows (db-query "hq_cart_lines" {"ticket_id" (server-req-param $req "id")}))))))
 
+(defn invoice-locked? [$gate $tid]
+  (and (= (?? (get (get $gate "user") "role") "") "technician")
+       (> (length (filter (fn [$d] (= (?? (get $d "doc_type") "") "invoice"))
+                          (db-rows (db-query "hq_documents" {"ticket_id" $tid}))))
+          0)))
+
 (defn handle-cart-add [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$tid (server-req-param $req "id")
+      (if (field-write-denied? $gate (server-req-param $req "id"))
+        (json-err 403 "not your assignment")
+        (let [$tid (server-req-param $req "id")
             $body (req-body $req)
             $kind (?? (get $body "kind") "part")
+            $locked (invoice-locked? $gate $tid)
             $pid (?? (get $body "product_id") "")
             $name (?? (get $body "name") "")
             $qty (?? (get $body "qty") 1)
@@ -760,14 +781,39 @@
                   "qty" $qty
                   "price" $pr
                   "created_at" (iso-now)}]
-        (db-insert "hq_cart_lines" $row)
-        (json-created $row)))))
+        (if (or $locked (and (= (?? (get (get $gate "user") "role") "") "technician") (= $kind "travel")))
+          (json-err 403 "cart locked or travel is automatic")
+          (do
+            (db-insert "hq_cart_lines" $row)
+            (json-created $row))))))))
+
+(defn handle-cart-qty [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tid (server-req-param $req "id")
+            $body (req-body $req)
+            $lid (?? (get $body "line_id") "")
+            $qty (?? (get $body "qty") 1)
+            $line (db-row (db-get-row "hq_cart_lines" $lid))
+            $locked (invoice-locked? $gate $tid)]
+        (if (field-write-denied? $gate $tid)
+          (json-err 403 "not your assignment")
+          (if (or (nil? $line) (not (= (get $line "ticket_id") $tid)))
+            (json-err 404 "line not found")
+            (if $locked
+              (json-err 403 "invoice locked")
+              (do
+                (db-patch "hq_cart_lines" $lid {"qty" $qty})
+                (json-ok (db-rows (db-query "hq_cart_lines" {"ticket_id" $tid})))))))))))
 
 (defn handle-cart-sync-travel [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$tid (server-req-param $req "id")
+      (if (field-write-denied? $gate (server-req-param $req "id"))
+        (json-err 403 "not your assignment")
+        (let [$tid (server-req-param $req "id")
             $fin (finance-get $tid)
             $fee (?? (get $fin "travel_fee") 0)
             $lines (db-rows (db-query "hq_cart_lines" {"ticket_id" $tid}))
@@ -785,7 +831,7 @@
                       "price" $fee
                       "created_at" (iso-now)})
           (db-patch "hq_cart_lines" (get (get $travels 0) "line_id") {"price" $fee}))
-        (json-ok (db-rows (db-query "hq_cart_lines" {"ticket_id" $tid})))))))
+        (json-ok (db-rows (db-query "hq_cart_lines" {"ticket_id" $tid}))))))))
 
 (defn handle-contractor-create [$req]
   (let [$gate (require-user $req)]
@@ -809,6 +855,74 @@
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
       (json-ok (db-rows (db-query "hq_contractors" {"company_id" (cid $gate)}))))))
+
+(defn handle-ticket-log [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$tid (server-req-param $req "id")
+            $memo (?? (get (req-body $req) "memo") "")]
+        (if (field-write-denied? $gate $tid)
+          (json-err 403 "not your assignment")
+          (do
+            (db-patch "hq_tickets" $tid {"work_note" $memo "updated_at" (iso-now)})
+            (add-event! (cid $gate) $tid (uid $gate) "log" "" "" $memo)
+            (json-ok {"ticket_id" $tid "work_note" $memo})))))))
+
+(defn handle-me-password [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$pw (?? (get (req-body $req) "password") "")
+            $id (uid $gate)]
+        (if (= $pw "")
+          (json-err 400 "password required")
+          (do
+            (db-patch "hq_users" $id {"password_hash" (auth-hash-password $pw) "updated_at" (iso-now)})
+            (json-ok {"user_id" $id "password_changed" true})))))))
+
+(defn day-close-parse [$note]
+  (let [$n (?? $note "")
+        $mark "[[day-close]]"
+        $i (str-index-of $n $mark)]
+    (if (< $i 0)
+      {"kind" "" "day" "" "note" ""}
+      (let [$p (slice $n (+ $i (length $mark)))
+            $a (str-index-of $p "|")
+            $kind (if (< $a 0) $p (slice $p 0 $a))
+            $rest (if (< $a 0) "" (slice $p (+ $a 1)))
+            $b (str-index-of $rest "|")
+            $day (if (< $b 0) $rest (slice $rest 0 $b))
+            $memo (if (< $b 0) "" (slice $rest (+ $b 1)))]
+        {"kind" $kind "day" $day "note" $memo}))))
+
+(defn handle-day-close [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$body (req-body $req)
+            $kind (?? (get $body "kind") "")
+            $day (?? (get $body "day") (slice (iso-now) 0 10))
+            $memo (?? (get $body "note") "")
+            $id (uid $gate)
+            $u (db-row (db-get-row "hq_users" $id))]
+        (if (and (not (= $kind "clock_out")) (not (= $kind "return_hq")))
+          (json-err 400 "kind clock_out|return_hq")
+          (let [$prev (?? (get $u "note") "")
+                $mark "[[day-close]]"
+                $i (str-index-of $prev $mark)
+                $base (if (< $i 0) $prev (slice $prev 0 $i))
+                $next (str $base $mark $kind "|" $day "|" $memo)]
+            (db-patch "hq_users" $id {"note" $next "updated_at" (iso-now)})
+            (json-ok {"user_id" $id "kind" $kind "day" $day "note" $memo})))))))
+
+(defn handle-day-close-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$u (db-row (db-get-row "hq_users" (uid $gate)))
+            $p (day-close-parse (?? (get $u "note") ""))]
+        (json-ok (assoc $p "user_id" (uid $gate)))))))
 
 (defn handle-legacy-gone [$req]
   (json-err 404 "legacy customer portal removed — use /hq"))
