@@ -14,6 +14,8 @@
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+    .nav-toggle{display:none}
+    .nav-bg{display:none}
     .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
     .brand{padding:8px 10px 16px;border-bottom:1px solid var(--line);margin-bottom:8px}
     .brand h1{font-size:16px}
@@ -60,6 +62,7 @@
     .drawer-bg.show{display:block}
     .drawer{position:fixed;top:0;right:0;width:min(480px,100%);height:100%;background:var(--panel);border-left:1px solid var(--line);z-index:40;transform:translateX(100%);transition:.2s;overflow:auto;padding:14px 14px 28px}
     .drawer.show{transform:translateX(0)}
+    .drawer-handle{display:none}
     .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:45;align-items:flex-end;justify-content:center;padding:0}
     .modal-bg.show{display:flex}
     .modal{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;padding:14px 14px 22px;width:min(520px,100%);max-height:82vh;overflow:auto}
@@ -70,13 +73,14 @@
       .modal{border-radius:12px;max-height:90vh;width:min(480px,92%)}
       .modal-handle{display:none}
     }
-    @media(max-width:820px){
-      .drawer{top:auto;bottom:0;left:0;right:0;width:100%;height:auto;max-height:88vh;border-left:none;border-top:1px solid var(--line);border-radius:16px 16px 0 0;transform:translateY(110%)}
+    @media(max-width:979px){
+      .drawer{top:auto;bottom:0;left:0;right:0;width:100%;height:88vh;max-height:88vh;border-left:none;border-top:1px solid var(--line);border-radius:16px 16px 0 0;transform:translateY(110%);padding-top:8px}
       .drawer.show{transform:translateY(0)}
+      .drawer-handle{display:block;width:42px;height:4px;border-radius:999px;background:#3a4b6a;margin:4px auto 12px}
     }
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
     .split{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}
-    @media(max-width:980px){.split{grid-template-columns:1fr}.sidebar{width:180px}}
+    @media(max-width:979px){.split{grid-template-columns:1fr}}
     .desk-sticky{position:sticky;top:0;z-index:5}
     .desk-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line)}
     .desk-hit{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;margin-bottom:8px;background:#0e1626}
@@ -94,18 +98,57 @@
     .photo-thumb img{width:100%;height:88px;object-fit:cover;display:block}
     .photo-thumb .cap{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:10px;background:rgba(0,0,0,.65);color:#fff}
     .photo-full{max-width:100%;max-height:70vh;border-radius:8px;display:block;margin:0 auto}
-    @media(max-width:720px){
-      body{flex-direction:column}
-      .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;gap:4px;padding:8px}
-      .nav{display:flex;flex-wrap:wrap;gap:4px;width:100%}
-      .nav button{width:auto;padding:8px 10px}
-      .userbox{width:100%;margin-top:0}
-      .desk-actions .btn-primary{flex:1;min-width:140px}
+    @media(max-width:979px){
+      body{display:block}
+      body.nav-open{overflow:hidden}
+      .nav-toggle{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0}
+      .nav-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:55}
+      body.nav-open .nav-bg{display:block}
+      .sidebar{position:fixed;top:0;left:0;bottom:0;width:85%;max-width:360px;z-index:60;transform:translateX(-105%);transition:transform .2s;overflow:auto}
+      body.nav-open .sidebar{transform:none}
+      .nav button{min-height:44px;font-size:15px}
+      .main{min-height:100vh}
+      .top{position:sticky;top:0;z-index:40;height:56px;padding:0 10px;display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;background:var(--panel)}
+      #title{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .content{padding:10px 14px 28px}
+      .card{margin-bottom:10px}
+      .alert-line{margin:0 0 10px;line-height:1.45}
+      input,select,textarea,.btn{min-height:44px;font-size:16px}
+      textarea{min-height:88px}
+      .btn-sm{min-height:44px;padding:8px 12px;font-size:14px}
+      .row{flex-direction:column;align-items:stretch}
+      .grow{min-width:0;width:100%}
+      .chips{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;margin-top:0;margin-bottom:10px;padding-bottom:4px}
+      .chips .btn{flex:0 0 auto}
+      .stack-actions{flex-direction:column}
+      .stack-actions .btn{width:100%}
+      .sticky-actions,.desk-actions{position:sticky;bottom:0;z-index:6;background:var(--card);padding:8px 0 4px;margin-top:12px}
+      .desk-sticky{position:sticky;top:56px;z-index:8;background:var(--bg)}
+      .stats{grid-template-columns:1fr 1fr}
+      .content,.drawer{overflow-x:hidden}
+      table.cards{display:block;width:100%}
+      table.cards thead{display:none}
+      table.cards tbody,table.cards tr{display:block}
+      table.cards tr{background:#0e1626;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+      table.cards td{display:none;border:none;padding:0}
+      table.cards td[data-line="1"]{display:block;font-weight:700}
+      table.cards td[data-line="b"]{display:inline-block;margin-right:4px}
+      table.cards td[data-line="2"]{display:block;color:var(--muted);margin-top:4px}
+      table.cards td[data-line="3"]{display:inline;color:var(--muted);font-size:12px}
+      table.cards td[data-line="3"]+td[data-line="3"]::before{content:" · "}
+      table.cards td[data-line="act"]{display:block;margin-top:8px}
+      table.cards td[data-line="act"] .btn{width:100%}
+      table.kv{width:100%;table-layout:fixed}
+      table.kv td,table.kv th{word-break:break-word}
+    }
+    @media(min-width:980px){
+      .nav-toggle,.nav-bg,.drawer-handle{display:none !important}
     }
 
   </style>
 </head>
 <body>
+  <div class="nav-bg" id="navBg"></div>
   <aside class="sidebar">
     <div class="brand"><h1>빅워시 HQ</h1><p>본사 운영</p></div>
     <nav class="nav" id="nav"></nav>
@@ -117,14 +160,13 @@
   </aside>
   <div class="main">
     <div class="top">
-      <div>
-        <strong id="title">대시보드</strong>
-        <div class="muted mono" id="meta" style="font-size:11px"></div>
-        <div class="muted" id="alerts" style="font-size:12px;margin-top:4px">알림 불러오는 중</div>
-      </div>
+      <button class="btn nav-toggle" type="button" id="btnNav" aria-label="메뉴">☰</button>
+      <strong id="title">대시보드</strong>
       <button class="btn btn-sm" type="button" id="btnRefresh">새로고침</button>
     </div>
     <div class="content">
+      <div class="muted alert-line" id="alerts">알림 불러오는 중</div>
+      <div class="muted mono" id="meta" style="font-size:11px"></div>
       <section class="panel active" id="p-dashboard"><div class="stats" id="dash"></div><div class="card" id="dashExtra"></div></section>
       <section class="panel" id="p-desk"></section>
       <section class="panel" id="p-board"></section>
@@ -141,7 +183,7 @@
     </div>
   </div>
   <div class="drawer-bg" id="drawerBg"></div>
-  <aside class="drawer" id="drawer"><div id="drawerBody"></div></aside>
+  <aside class="drawer" id="drawer"><div class="drawer-handle"></div><div id="drawerBody"></div></aside>
   <div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
   <div class="toast" id="toast"></div>
 
@@ -232,9 +274,15 @@
   nav.innerHTML = MENUS.map(([id, label]) =>
     '<button type="button" data-panel="' + id + '">' + label + '</button>'
   ).join('');
+  function closeNav() { document.body.classList.remove('nav-open'); }
   nav.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-panel]');
-    if (b) showPanel(b.dataset.panel);
+    if (b) { showPanel(b.dataset.panel); closeNav(); }
+  });
+  document.getElementById('btnNav').onclick = () => document.body.classList.toggle('nav-open');
+  document.getElementById('navBg').onclick = closeNav;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeNav(); closeDrawer(); closeModal(); }
   });
   document.getElementById('btnLogout').onclick = () => { localStorage.clear(); location.href = '/hq/login.html'; };
   document.getElementById('btnRefresh').onclick = () => refresh();
@@ -342,7 +390,7 @@
       };
     });
     document.getElementById('dashExtra').innerHTML =
-      '<div class="actions">' +
+      '<div class="actions stack-actions">' +
       '<button class="btn btn-primary" type="button" id="goDesk">전화 데스크</button>' +
       '<button class="btn" type="button" id="goUnassigned">미지정 큐</button>' +
       '<button class="btn" type="button" id="goUnpaid">미수 목록</button></div>' +
@@ -514,8 +562,8 @@
       <div class="desk-section">
         <h4>장비 ${eqs.length}</h4>
         <div id="deskEqTable">${eqs.length
-          ? '<table><thead><tr><th>이름</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
-            eqs.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note || '') + '</td><td class="mono">' + esc(e.serial || '') + '</td></tr>').join('') +
+          ? '<table class="cards"><thead><tr><th>이름</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
+            eqs.map((e) => '<tr><td data-line="1">' + esc(e.name) + '</td><td data-line="2">' + esc(e.location_note || '') + '</td><td class="mono" data-line="3">' + esc(e.serial || '') + '</td></tr>').join('') +
             '</tbody></table>'
           : '<div class="muted">등록된 장비 없음</div>'}</div>
         <div class="row" style="margin-top:10px">
@@ -528,8 +576,8 @@
       <div class="desk-section">
         <h4>최근 출장</h4>
         ${recent.length
-          ? '<table><thead><tr><th>번호</th><th>상태</th><th>요청</th></tr></thead><tbody>' +
-            recent.map((t) => '<tr class="clickable" data-tid="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) + '</td><td>' + esc(t.symptom || '') + '</td></tr>').join('') +
+          ? '<table class="cards"><thead><tr><th>번호</th><th>상태</th><th>요청</th></tr></thead><tbody>' +
+            recent.map((t) => '<tr class="clickable" data-tid="' + esc(t.ticket_id) + '"><td class="mono" data-line="3">' + esc(t.number) + '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="2">' + esc(t.symptom || '') + '</td></tr>').join('') +
             '</tbody></table>'
           : '<div class="muted">최근 출장 없음</div>'}
       </div>
@@ -682,7 +730,7 @@
   async function renderBoard(status) {
     const el = document.getElementById('p-board');
     const filters = ['', 'waiting_assign', 'assigned', 'en_route', 'done', 'followup', 'closed'];
-    el.innerHTML = '<div class="actions" id="bf" style="margin-bottom:10px"></div><div class="card" id="blist"></div>';
+    el.innerHTML = '<div class="actions chips" id="bf"></div><div class="card" id="blist"></div>';
     document.getElementById('bf').innerHTML = filters.map((s) =>
       '<button type="button" class="btn btn-sm" data-s="' + s + '">' + (s ? (STATUS[s] || s) : '전체') + '</button>'
     ).join('');
@@ -694,12 +742,12 @@
     const rows = await api('/hq/tickets' + q);
     const box = document.getElementById('blist');
     if (!rows.length) { box.innerHTML = '<div class="empty">티켓 없음</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>고객표시명</th><th>증상</th><th>담당이름</th><th>방문일시</th><th>정산뱃지</th></tr></thead><tbody>' +
-      rows.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) +
-        '</td><td>' + badge(t.status) + '</td><td>' + esc(t.customer_display_name || '') +
-        '</td><td>' + esc(t.symptom) + '</td><td>' + esc(whoLabel(t)) +
-        '</td><td class="mono">' + esc(t.visit_at || t.scheduled_at || '') +
-        '</td><td>' + esc(t.settlement_status || '정산없음') + '</td></tr>').join('') + '</tbody></table>';
+    box.innerHTML = '<table class="cards"><thead><tr><th>번호</th><th>상태</th><th>고객표시명</th><th>증상</th><th>담당이름</th><th>방문일시</th><th>정산뱃지</th></tr></thead><tbody>' +
+      rows.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono" data-line="3">' + esc(t.number) +
+        '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="1">' + esc(t.customer_display_name || '') +
+        '</td><td data-line="2">' + esc(t.symptom) + '</td><td data-line="3">' + esc(whoLabel(t)) +
+        '</td><td class="mono" data-line="3">' + esc(t.visit_at || t.scheduled_at || '') +
+        '</td><td data-line="b">' + esc(t.settlement_status || '정산없음') + '</td></tr>').join('') + '</tbody></table>';
     box.querySelectorAll('tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
   }
 
@@ -832,13 +880,13 @@
       const asg = force ? await api('/hq/tickets/' + id + '/assignees') : asgCache;
       if (force) asgCache = asg;
       document.getElementById('dAsgList').innerHTML = (asg || []).length
-        ? '<table><thead><tr><th>구분</th><th>이름/ID</th><th>주</th><th>일당</th></tr></thead><tbody>' +
+        ? '<table class="cards"><thead><tr><th>구분</th><th>이름/ID</th><th>주</th><th>일당</th></tr></thead><tbody>' +
           asg.map((a) => {
             const staffName = ((staff || []).find((u) => u.user_id === a.user_id) || {}).name || '';
             const shown = a.kind === 'contractor' ? (a.contractor_name || '용병') : (staffName || '이름없음');
-            return '<tr><td>' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td>' +
-              esc(shown) + '</td><td>' + (a.is_primary === 'true' ? '주담당' : '') +
-              '</td><td>' + esc(a.day_pay_amount || '-') + '</td></tr>';
+            return '<tr><td data-line="b">' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td data-line="1">' +
+              esc(shown) + '</td><td data-line="3">' + (a.is_primary === 'true' ? '주담당' : '') +
+              '</td><td data-line="2">' + esc(a.day_pay_amount || '-') + '</td></tr>';
           }).join('') + '</tbody></table>'
         : '<div class="muted">배정 내역 없음</div>';
 
@@ -851,12 +899,12 @@
       if (force) cartCache = cart;
       const sum = (cart || []).reduce((s, l) => s + (Number(l.qty || 1) * Number(l.price || 0)), 0);
       document.getElementById('dCart').innerHTML = (cart || []).length
-        ? '<table><thead><tr><th>구분</th><th>항목</th><th>수량</th><th>단가</th><th>금액</th></tr></thead><tbody>' +
+        ? '<table class="cards"><thead><tr><th>구분</th><th>항목</th><th>수량</th><th>단가</th><th>금액</th></tr></thead><tbody>' +
           cart.map((l) => {
             const amt = Number(l.qty || 1) * Number(l.price || 0);
             const kindLabel = l.kind === 'travel' ? '출장비' : (l.kind === 'labor' ? '공임' : '부품');
-            return '<tr><td>' + kindLabel + '</td><td>' + esc(l.name) + '</td><td>' + esc(l.qty) +
-              '</td><td>' + esc(l.price) + '</td><td>' + amt + '</td></tr>';
+            return '<tr><td data-line="b">' + kindLabel + '</td><td data-line="1">' + esc(l.name) + '</td><td data-line="3">' + esc(l.qty) +
+              '</td><td data-line="2">' + esc(l.price) + '</td><td data-line="2">' + amt + '</td></tr>';
           }).join('') + '</tbody></table><div style="margin-top:6px"><b>합계 ' + sum + '원</b> (고객 안내 금액)</div>'
         : '<div class="muted">장바구니 비어 있음 — 몰 부품을 담으세요</div>';
     }
@@ -1094,7 +1142,7 @@
 
   async function renderCustomers() {
     const el = document.getElementById('p-customers');
-    el.innerHTML = `<div class="card"><div class="row">
+    el.innerHTML = `<div class="card desk-sticky"><div class="row">
       <div class="grow"><label>검색 (번호·상호)</label><input id="csQ" /></div>
       <button class="btn btn-primary" type="button" id="csBtn">검색</button>
       <button class="btn" type="button" id="csNew">새 고객</button>
@@ -1104,9 +1152,9 @@
       const q = document.getElementById('csQ').value.trim();
       const rows = await api('/hq/customers' + (q ? ('?q=' + encodeURIComponent(q)) : ''));
       document.getElementById('csList').innerHTML = rows.length
-        ? '<table><thead><tr><th>표시명</th><th>전화</th><th>주소</th><th>상태</th></tr></thead><tbody>' +
-          rows.map((c) => '<tr class="clickable" data-id="' + esc(c.customer_id) + '"><td>' + esc(c.display_name) +
-            '</td><td class="mono">' + esc(c.primary_phone) + '</td><td>' + esc(c.address) + '</td><td>' +
+        ? '<table class="cards"><thead><tr><th>표시명</th><th>전화</th><th>주소</th><th>상태</th></tr></thead><tbody>' +
+          rows.map((c) => '<tr class="clickable" data-id="' + esc(c.customer_id) + '"><td data-line="1">' + esc(c.display_name) +
+            '</td><td class="mono" data-line="2">' + esc(c.primary_phone) + '</td><td data-line="3">' + esc(c.address) + '</td><td data-line="b">' +
             esc(c.status) + '</td></tr>').join('') + '</tbody></table>'
         : '<div class="empty">없음</div>';
       document.querySelectorAll('#csList tr.clickable').forEach((tr) => tr.onclick = () => openCustomerEditor(tr.dataset.id));
@@ -1168,7 +1216,7 @@
         <div class="grow"><label>정산메모</label><input id="fSettle" value="${esc(extra.settle_memo || '')}" /></div>
         <div class="grow"><label>보증메모</label><input id="fWarr" value="${esc(extra.warranty_memo || '')}" /></div>
       </div>
-      <div class="actions">
+      <div class="actions sticky-actions">
         <button class="btn btn-primary" type="button" id="fSave">저장</button>
         <button class="btn" type="button" id="fSaveGo">저장 후 출장</button>
         <button class="btn" type="button" id="fSaveConsult">저장 후 상담종결</button>
@@ -1303,16 +1351,16 @@
 
   async function renderEquipment() {
     const el = document.getElementById('p-equipment');
-    el.innerHTML = `<div class="card"><div class="row"><div class="grow"><label>고객ID</label>
+    el.innerHTML = `<div class="card desk-sticky"><div class="row"><div class="grow"><label>고객ID</label>
       <input id="eqCid" placeholder="비우면 전체" /></div>
       <button class="btn btn-primary" type="button" id="eqBtn">검색</button></div><div id="eqAll" style="margin-top:10px"></div></div>`;
     const run = async () => {
       const cid = document.getElementById('eqCid').value.trim();
       const rows = await api('/hq/equipment' + (cid ? ('?customer_id=' + encodeURIComponent(cid)) : ''));
       document.getElementById('eqAll').innerHTML = rows.length
-        ? '<table><thead><tr><th>장비</th><th>고객</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
-          rows.map((e) => '<tr><td>' + esc(e.name) + '</td><td class="mono">' + esc(e.customer_id) + '</td><td>' +
-            esc(e.location_note) + '</td><td class="mono">' + esc(e.serial) + '</td></tr>').join('') + '</tbody></table>'
+        ? '<table class="cards"><thead><tr><th>장비</th><th>고객</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
+          rows.map((e) => '<tr><td data-line="1">' + esc(e.name) + '</td><td data-line="2">' + esc(e.customer_id) + '</td><td data-line="3">' +
+            esc(e.location_note) + '</td><td class="mono" data-line="3">' + esc(e.serial) + '</td></tr>').join('') + '</tbody></table>'
         : '<div class="empty">없음</div>';
     };
     document.getElementById('eqBtn').onclick = run;
@@ -1369,9 +1417,9 @@
         </div>${payBlock}</div>`;
     }).join('') || '<div class="empty">직원 없음</div>';
     document.getElementById('uCtr').innerHTML = (contractors || []).length
-      ? '<table><thead><tr><th>이름</th><th>전화</th><th>상태</th></tr></thead><tbody>' +
-        contractors.map((c) => '<tr><td>' + esc(c.name) + '</td><td class="mono">' + esc(c.phone || '') +
-          '</td><td>' + esc(c.status || '') + '</td></tr>').join('') + '</tbody></table>'
+      ? '<table class="cards"><thead><tr><th>이름</th><th>전화</th><th>상태</th></tr></thead><tbody>' +
+        contractors.map((c) => '<tr><td data-line="1">' + esc(c.name) + '</td><td class="mono" data-line="2">' + esc(c.phone || '') +
+          '</td><td data-line="b">' + esc(c.status || '') + '</td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">등록된 용병 없음</div>';
 
     const recalc = (uid) => {
@@ -1498,11 +1546,11 @@
     let html = '';
     if (conflicts.length) html += '<div class="empty" style="color:#ff8a95">충돌 경고 ' + conflicts.length + '건 (저장은 됨)</div>';
     html += mine.length
-      ? '<table><thead><tr><th>시각</th><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산뱃지</th><th></th></tr></thead><tbody>' +
-        mine.map((t) => '<tr><td class="mono">' + esc(t.visit_at || t.scheduled_at) + '</td><td class="mono">' + esc(t.number) +
-          '</td><td>' + esc(t.customer_display_name || '') + '</td><td>' + esc(whoLabel(t)) +
-          '</td><td>' + badge(t.status) + '</td><td>' + esc(t.settlement_status || '정산없음') +
-          '</td><td><button class="btn btn-sm" type="button" data-open="' +
+      ? '<table class="cards"><thead><tr><th>시각</th><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산뱃지</th><th></th></tr></thead><tbody>' +
+        mine.map((t) => '<tr><td class="mono" data-line="2">' + esc(t.visit_at || t.scheduled_at) + '</td><td class="mono" data-line="3">' + esc(t.number) +
+          '</td><td data-line="1">' + esc(t.customer_display_name || '') + '</td><td data-line="3">' + esc(whoLabel(t)) +
+          '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + esc(t.settlement_status || '정산없음') +
+          '</td><td data-line="act"><button class="btn btn-sm" type="button" data-open="' +
           esc(t.ticket_id) + '">서랍</button></td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">이 날짜 일정 없음</div>';
     document.getElementById('schList').innerHTML = html;
@@ -1511,10 +1559,10 @@
     const all = await api('/hq/tickets');
     const pool = all.filter((t) => t.status !== 'closed' && t.status !== 'cancelled' && !t.scheduled_at);
     document.getElementById('schPool').innerHTML = pool.length
-      ? '<table><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
-        pool.slice(0, 40).map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + esc(t.customer_display_name || '') +
-          '</td><td>' + esc(whoLabel(t)) + '</td><td>' + esc(t.symptom) +
-          '</td><td><button class="btn btn-sm btn-primary" type="button" data-give="' +
+      ? '<table class="cards"><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
+        pool.slice(0, 40).map((t) => '<tr><td class="mono" data-line="3">' + esc(t.number) + '</td><td data-line="1">' + esc(t.customer_display_name || '') +
+          '</td><td data-line="3">' + esc(whoLabel(t)) + '</td><td data-line="2">' + esc(t.symptom) +
+          '</td><td data-line="act"><button class="btn btn-sm btn-primary" type="button" data-give="' +
           esc(t.ticket_id) + '">부여</button></td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">미일정 티켓 없음</div>';
     document.querySelectorAll('[data-give]').forEach((b) => b.onclick = async () => {
@@ -1549,12 +1597,12 @@
       <p class="muted" style="margin-bottom:10px">장바구니는 여기가 아니라 <b>출장 티켓 서랍</b>에 있습니다. 보드에서 티켓을 연 뒤 「몰에서 담기」를 누르세요.</p>
       <div id="pList"></div></div>`;
     document.getElementById('pList').innerHTML = rows.length
-      ? '<table><thead><tr><th>이름</th><th>카테고리</th><th>유형</th><th>판매가</th>' +
+      ? '<table class="cards"><thead><tr><th>이름</th><th>카테고리</th><th>유형</th><th>판매가</th>' +
         (money ? '<th>원가</th>' : '') + '<th>SKU</th><th>상태</th></tr></thead><tbody>' +
-        rows.map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.category) + '</td><td>' + esc(fulfillOf(p)) +
-          '</td><td class="mono">' + esc(p.sale_price) + '</td>' +
-          (money ? '<td class="mono">' + esc(p.cost_price) + '</td>' : '') +
-          '<td class="mono">' + esc(p.sku) + '</td><td>' + esc(p.status) + '</td></tr>').join('') + '</tbody></table>'
+        rows.map((p) => '<tr><td data-line="1">' + esc(p.name) + '</td><td data-line="3">' + esc(p.category) + '</td><td data-line="2">' + esc(fulfillOf(p)) +
+          '</td><td class="mono" data-line="2">' + esc(p.sale_price) + '</td>' +
+          (money ? '<td class="mono" data-line="3">' + esc(p.cost_price) + '</td>' : '') +
+          '<td class="mono" data-line="3">' + esc(p.sku) + '</td><td data-line="b">' + esc(p.status) + '</td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">상품 없음</div>';
     document.getElementById('pAdd').onclick = () => {
       showModal(`<h3>상품 등록</h3>
@@ -1601,9 +1649,9 @@
     el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between"><h3>권역 요금표</h3>
       <button class="btn btn-primary" type="button" id="rAdd">＋ 권역</button></div><div id="rList"></div></div>`;
     document.getElementById('rList').innerHTML =
-      '<table><thead><tr><th>이름</th><th>광역</th><th>출장비</th><th>상태</th></tr></thead><tbody>' +
-      rows.map((r) => '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.metro) + '</td><td class="mono">' + esc(r.travel_fee) +
-        '</td><td>' + esc(r.status) + '</td></tr>').join('') + '</tbody></table>';
+      '<table class="cards"><thead><tr><th>이름</th><th>광역</th><th>출장비</th><th>상태</th></tr></thead><tbody>' +
+      rows.map((r) => '<tr><td data-line="1">' + esc(r.name) + '</td><td data-line="3">' + esc(r.metro) + '</td><td class="mono" data-line="2">' + esc(r.travel_fee) +
+        '</td><td data-line="b">' + esc(r.status) + '</td></tr>').join('') + '</tbody></table>';
     document.getElementById('rAdd').onclick = () => {
       showModal(`<h3>권역 추가/수정</h3>
         <label>이름</label><input id="rn" placeholder="서울-송파" />
@@ -1645,7 +1693,7 @@
     const expFilter = (opts && opts.expFilter) || 'pending';
     const opexYm = (opts && opts.opexYm) || new Date().toISOString().slice(0, 7);
     const money = canEditMoney();
-    el.innerHTML = `<div class="card"><div class="actions">
+    el.innerHTML = `<div class="card"><div class="actions chips">
       <button class="btn btn-sm${t === 'unpaid' ? ' btn-primary' : ''}" type="button" data-t="unpaid">미수</button>
       <button class="btn btn-sm${t === 'collected' ? ' btn-primary' : ''}" type="button" data-t="collected">출장수금</button>
       <button class="btn btn-sm${t === 'expenses' ? ' btn-primary' : ''}" type="button" data-t="expenses">경비</button>
@@ -1658,16 +1706,16 @@
       const data = await api('/hq/settlements?tab=unpaid');
       const rows = data.rows || data || [];
       body.innerHTML = rows.length
-        ? '<table><thead><tr><th>티켓번호</th><th>고객</th><th>합계</th><th>받은액</th><th>정산</th><th></th></tr></thead><tbody>' +
+        ? '<table class="cards"><thead><tr><th>티켓번호</th><th>고객</th><th>합계</th><th>받은액</th><th>정산</th><th></th></tr></thead><tbody>' +
           rows.map((r) => {
             const opts = SETTLE_BADGES.map((s) =>
               '<option value="' + esc(s) + '"' + (r.settlement_status === s ? ' selected' : '') + '>' + esc(s) + '</option>'
             ).join('');
-            return '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono">' + esc(r.number || r.ticket_id) +
-              '</td><td>' + esc(r.customer_name || '') + '</td><td>' + moneyFmt(r.total) +
-              '</td><td>' + moneyFmt(r.settlement_paid) +
-              '</td><td onclick="event.stopPropagation()"><select data-badge="' + esc(r.ticket_id) + '">' + opts +
-              '</select></td><td onclick="event.stopPropagation()"><button class="btn btn-sm" type="button" data-open="' +
+            return '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono" data-line="3">' + esc(r.number || r.ticket_id) +
+              '</td><td data-line="1">' + esc(r.customer_name || '') + '</td><td data-line="2">' + moneyFmt(r.total) +
+              '</td><td data-line="3">' + moneyFmt(r.settlement_paid) +
+              '</td><td data-line="b" onclick="event.stopPropagation()"><select data-badge="' + esc(r.ticket_id) + '">' + opts +
+              '</select></td><td data-line="act" onclick="event.stopPropagation()"><button class="btn btn-sm" type="button" data-open="' +
               esc(r.ticket_id) + '">열기</button></td></tr>';
           }).join('') + '</tbody></table>'
         : '<div class="empty">미수 없음</div>';
@@ -1716,7 +1764,7 @@
         };
       });
     } else if (t === 'collected') {
-      body.innerHTML = `<div class="actions" style="margin-bottom:10px">
+      body.innerHTML = `<div class="actions chips" style="margin-bottom:10px">
         <button class="btn btn-sm${period === 'today' ? ' btn-primary' : ''}" type="button" data-p="today">오늘</button>
         <button class="btn btn-sm${period === 'week' ? ' btn-primary' : ''}" type="button" data-p="week">이번주</button>
         <button class="btn btn-sm${period === 'month' ? ' btn-primary' : ''}" type="button" data-p="month">이번달</button>
@@ -1726,12 +1774,12 @@
       const rows = data.rows || [];
       const col = document.getElementById('colBody');
       col.innerHTML = (rows.length
-        ? '<table><thead><tr><th>출장일</th><th>티켓</th><th>고객</th><th>출장비</th><th>수리</th><th>수금상태</th><th>수금액</th></tr></thead><tbody>' +
-          rows.map((r) => '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono">' +
-            esc((r.completed_at || r.scheduled_at || '').slice(0, 10)) + '</td><td class="mono">' +
-            esc(r.number || r.ticket_id) + '</td><td>' + esc(r.customer_name || '') + '</td><td>' +
-            moneyFmt(r.travel_fee) + '</td><td>' + moneyFmt(r.repair_total) + '</td><td><span class="badge">' +
-            esc(r.settlement_status) + '</span></td><td>' + moneyFmt(r.settlement_paid) + '</td></tr>').join('') +
+        ? '<table class="cards"><thead><tr><th>출장일</th><th>티켓</th><th>고객</th><th>출장비</th><th>수리</th><th>수금상태</th><th>수금액</th></tr></thead><tbody>' +
+          rows.map((r) => '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono" data-line="3">' +
+            esc((r.completed_at || r.scheduled_at || '').slice(0, 10)) + '</td><td class="mono" data-line="3">' +
+            esc(r.number || r.ticket_id) + '</td><td data-line="1">' + esc(r.customer_name || '') + '</td><td data-line="2">' +
+            moneyFmt(r.travel_fee) + '</td><td data-line="3">' + moneyFmt(r.repair_total) + '</td><td data-line="b"><span class="badge">' +
+            esc(r.settlement_status) + '</span></td><td data-line="2">' + moneyFmt(r.settlement_paid) + '</td></tr>').join('') +
           '</tbody></table>'
         : '<div class="empty">해당 기간 수금 없음</div>') +
         '<div class="card" style="margin-top:10px"><b>합계</b> 출장비 ' + moneyFmt(data.sum_travel) +
@@ -1743,7 +1791,7 @@
         const u = (staff || []).find((x) => x.user_id === uid);
         return u ? u.name : (uid || '-');
       };
-      body.innerHTML = `<div class="actions" style="margin-bottom:10px">
+      body.innerHTML = `<div class="actions chips" style="margin-bottom:10px">
         <button class="btn btn-sm${expFilter === 'pending' ? ' btn-primary' : ''}" type="button" data-ef="pending">대기</button>
         <button class="btn btn-sm${expFilter === 'approved' ? ' btn-primary' : ''}" type="button" data-ef="approved">승인</button>
         <button class="btn btn-sm${expFilter === 'rejected' ? ' btn-primary' : ''}" type="button" data-ef="rejected">반려</button>
@@ -1780,11 +1828,11 @@
       const rows = (await api('/hq/expenses')).filter((e) => e.status === expFilter);
       const expBody = document.getElementById('expBody');
       expBody.innerHTML = rows.length
-        ? '<table><thead><tr><th>직원</th><th>금액</th><th>항목</th><th>메모</th><th>영수증</th><th></th></tr></thead><tbody>' +
-          rows.map((e) => '<tr><td>' + esc(nameOf(e.user_id)) + '</td><td>' + moneyFmt(e.amount) +
-            '</td><td>' + esc(e.category) + '</td><td>' + esc(e.memo || '') +
-            '</td><td>' + (e.receipt_note ? '<button class="btn btn-sm" type="button" data-rc="' + esc(e.receipt_note) + '">보기</button>' : '-') +
-            '</td><td>' + (e.status === 'pending' && money
+        ? '<table class="cards"><thead><tr><th>직원</th><th>금액</th><th>항목</th><th>메모</th><th>영수증</th><th></th></tr></thead><tbody>' +
+          rows.map((e) => '<tr><td data-line="1">' + esc(nameOf(e.user_id)) + '</td><td data-line="2">' + moneyFmt(e.amount) +
+            '</td><td data-line="2">' + esc(e.category) + '</td><td data-line="3">' + esc(e.memo || '') +
+            '</td><td data-line="act">' + (e.receipt_note ? '<button class="btn btn-sm" type="button" data-rc="' + esc(e.receipt_note) + '">보기</button>' : '-') +
+            '</td><td data-line="act">' + (e.status === 'pending' && money
               ? '<button class="btn btn-sm btn-primary" type="button" data-ap="' + esc(e.expense_id) + '">승인</button> ' +
                 '<button class="btn btn-sm btn-danger" type="button" data-rj="' + esc(e.expense_id) + '">반려</button>'
               : '<span class="badge">' + esc(e.status) + '</span>') +
@@ -1834,9 +1882,9 @@
       const rows = (all || []).filter((o) => o.year_month === opexYm);
       const sum = rows.reduce((a, o) => a + Number(o.amount || 0), 0);
       document.getElementById('oxBody').innerHTML = rows.length
-        ? '<table><thead><tr><th>항목</th><th>금액</th><th>메모</th><th>입력시각</th></tr></thead><tbody>' +
-          rows.map((o) => '<tr><td>' + esc(o.category) + '</td><td>' + moneyFmt(o.amount) +
-            '</td><td>' + esc(o.memo || '') + '</td><td class="mono">' + esc((o.created_at || '').slice(0, 16)) +
+        ? '<table class="cards"><thead><tr><th>항목</th><th>금액</th><th>메모</th><th>입력시각</th></tr></thead><tbody>' +
+          rows.map((o) => '<tr><td data-line="1">' + esc(o.category) + '</td><td data-line="2">' + moneyFmt(o.amount) +
+            '</td><td data-line="3">' + esc(o.memo || '') + '</td><td class="mono" data-line="3">' + esc((o.created_at || '').slice(0, 16)) +
             '</td></tr>').join('') + '</tbody></table><div class="muted" style="margin-top:8px">합계 ' +
           moneyFmt(sum) + ' · 삭제는 없고 금액 0 정정 메모로 수정</div>'
         : '<div class="empty">이번 달 운영비 없음</div>';
@@ -1846,7 +1894,7 @@
   async function renderReports(kind) {
     const el = document.getElementById('p-reports');
     const k0 = kind || 'daily';
-    el.innerHTML = `<div class="card"><div class="actions">
+    el.innerHTML = `<div class="card"><div class="actions chips">
       <button class="btn btn-sm${k0 === 'daily' ? ' btn-primary' : ''}" type="button" data-k="daily">일</button>
       <button class="btn btn-sm${k0 === 'weekly' ? ' btn-primary' : ''}" type="button" data-k="weekly">주</button>
       <button class="btn btn-sm${k0 === 'monthly' ? ' btn-primary' : ''}" type="button" data-k="monthly">월</button>
@@ -1884,7 +1932,7 @@
         ];
       }
       document.getElementById('rTable').innerHTML =
-        '<table><thead><tr><th>지표</th><th>값</th></tr></thead><tbody>' +
+        '<table class="kv"><thead><tr><th>지표</th><th>값</th></tr></thead><tbody>' +
         rows.map(([l, v]) => '<tr><td>' + esc(l) + '</td><td class="mono"><b>' +
           esc(v != null ? v : 0) + '</b></td></tr>').join('') + '</tbody></table>';
       const csv = d.csv || ('지표,값\n' + rows.map(([l, v]) => l + ',' + (v != null ? v : 0)).join('\n') + '\n');
@@ -1905,10 +1953,10 @@
       ['unpaid', '완료·미수']
     ];
     const table = (rows) => (rows && rows.length)
-      ? '<table><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산</th><th></th></tr></thead><tbody>' +
-        rows.map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + esc(t.customer_display_name || '') +
-          '</td><td>' + esc(whoLabel(t)) + '</td><td>' + badge(t.status) + '</td><td>' + esc(t.settlement_status || '') +
-          '</td><td><button class="btn btn-sm" type="button" data-id="' + esc(t.ticket_id) + '">열기</button></td></tr>').join('') +
+      ? '<table class="cards"><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산</th><th></th></tr></thead><tbody>' +
+        rows.map((t) => '<tr><td class="mono" data-line="3">' + esc(t.number) + '</td><td data-line="1">' + esc(t.customer_display_name || '') +
+          '</td><td data-line="3">' + esc(whoLabel(t)) + '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + esc(t.settlement_status || '') +
+          '</td><td data-line="act"><button class="btn btn-sm" type="button" data-id="' + esc(t.ticket_id) + '">열기</button></td></tr>').join('') +
         '</tbody></table>'
       : '<div class="empty">없음</div>';
     const el = document.getElementById('p-followup');
@@ -1920,7 +1968,7 @@
   async function renderSettings() {
     const s = await api('/hq/settings');
     document.getElementById('p-settings').innerHTML =
-      '<div class="card"><h3>설정 (1차 잠금값)</h3><table><tbody>' +
+      '<div class="card"><h3>설정 (1차 잠금값)</h3><table class="kv"><tbody>' +
       Object.keys(s).map((k) => '<tr><td class="mono">' + esc(k) + '</td><td>' + esc(s[k]) + '</td></tr>').join('') +
       '</tbody></table></div>';
   }

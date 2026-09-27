@@ -95,6 +95,11 @@
       text-align: center; margin-top: 24px; color: var(--muted);
       font-size: 11px; font-family: var(--mono); line-height: 1.6;
     }
+    @media (max-width: 979px) {
+      body { align-items: flex-start; min-height: 100dvh; padding: 24px; overflow: auto; }
+      .login-container { padding: 28px 20px 24px; }
+      input[type="text"], input[type="password"], button { min-height: 44px; font-size: 16px; }
+    }
   </style>
 </head>
 <body>
