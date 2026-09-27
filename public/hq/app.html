@@ -6,9 +6,9 @@
   <title>빅워시 HQ</title>
   <style>
     :root {
-      --bg:#0b1220; --panel:#121a2b; --card:#162033; --line:#243149;
-      --text:#e7eefc; --muted:#8fa3c1; --accent:#3de0c7; --danger:#ff6b7a;
-      --warn:#ffb020; --info:#5b8cff; --ok:#3ddc97;
+      --bg:#070b14; --panel:#101827; --card:#182236; --line:#3d4f6e;
+      --text:#f3f7ff; --muted:#c5d4ea; --accent:#3de0c7; --danger:#ff8a95;
+      --warn:#ffc14d; --ok:#3ddc97; --info:#7aa2ff; --input:#0b1220;
       --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
       --sans:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,"Noto Sans KR",sans-serif;
     }
@@ -20,9 +20,9 @@
     .brand{padding:8px 10px 16px;border-bottom:1px solid var(--line);margin-bottom:8px}
     .brand h1{font-size:16px}
     .brand p{color:var(--muted);font-size:11px;font-family:var(--mono);margin-top:4px}
-    .nav button{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;color:var(--muted);padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px}
-    .nav button:hover{color:var(--text);background:rgba(255,255,255,.03)}
-    .nav button.active{color:var(--accent);border-color:rgba(61,224,199,.35);background:rgba(61,224,199,.08)}
+    .nav button{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;color:var(--text);padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+    .nav button:hover{background:rgba(255,255,255,.04)}
+    .nav button.active{color:var(--accent);border-color:transparent;background:rgba(61,224,199,.18)}
     .userbox{margin-top:auto;padding-top:12px;border-top:1px solid var(--line);font-size:12px}
     .userbox .muted{color:var(--muted)}
     .main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -35,11 +35,13 @@
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
     .grow{flex:1;min-width:140px}
     label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.03em}
-    input,select,textarea{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:#0e1626;color:var(--text);font-size:13px}
+    input,select,textarea{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input);color:var(--text);font-size:13px}
+    input::placeholder,textarea::placeholder{color:#9db0c9}
     textarea{min-height:70px;resize:vertical}
     .btn{border:1px solid var(--line);background:transparent;color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px}
     .btn:hover{border-color:#3a4b6a}
     .btn-primary{background:linear-gradient(135deg,#2bd4bd,#2a9df4);color:#041018;border:none;font-weight:700}
+    .chips .btn-primary{background:rgba(61,224,199,.18);color:var(--accent);border:1px solid var(--accent)}
     .btn-danger{border-color:rgba(255,107,122,.5);color:var(--danger)}
     .btn-sm{padding:5px 9px;font-size:12px}
     .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:12px}
@@ -51,7 +53,12 @@
     th{color:var(--muted);font-weight:600;font-size:11px}
     tr.clickable{cursor:pointer}
     tr.clickable:hover{background:rgba(255,255,255,.03)}
-    .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line)}
+    .badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:12px;border:none;background:#2a3344;color:#c5d4ea;line-height:1.35}
+    .badge.b-wait{background:#3a2e14;color:#ffc14d}
+    .badge.b-go{background:#12362f;color:#3de0c7}
+    .badge.b-done{background:#143028;color:#3ddc97}
+    .badge.b-stop{background:#2a3344;color:#c5d4ea}
+    .badge.b-unpaid{background:#3a1820;color:#ff8a95}
     .mono{font-family:var(--mono)}
     .muted{color:var(--muted)}
     .empty{padding:24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
@@ -83,16 +90,16 @@
     @media(max-width:979px){.split{grid-template-columns:1fr}}
     .desk-sticky{position:sticky;top:0;z-index:5}
     .desk-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line)}
-    .desk-hit{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;margin-bottom:8px;background:#0e1626}
+    .desk-hit{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;margin-bottom:8px;background:var(--input);color:var(--text)}
     .desk-hit:hover{border-color:rgba(61,224,199,.45)}
     .desk-hit.active{border-color:var(--accent);background:rgba(61,224,199,.08)}
     .desk-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-    .desk-section h4{font-size:13px;margin-bottom:8px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+    .desk-section h4{font-size:13px;margin-bottom:8px;color:var(--text);letter-spacing:.04em}
     .desk-kv{display:grid;grid-template-columns:72px 1fr;gap:4px 10px;font-size:13px;margin:8px 0}
-    .desk-kv .k{color:var(--muted)}
-    .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);margin-right:6px}
-    .pill.ok{border-color:rgba(61,220,151,.4);color:var(--ok)}
-    .pill.warn{border-color:rgba(255,176,32,.4);color:var(--warn)}
+    .desk-kv .k{color:var(--muted);font-size:11px}
+    .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:none;margin-right:6px;background:#2a3344;color:#c5d4ea}
+    .pill.ok{background:#143028;color:#3ddc97}
+    .pill.warn{background:#3a1820;color:#ff8a95}
     .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px}
     .photo-thumb{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0a101c;cursor:pointer;position:relative}
     .photo-thumb img{width:100%;height:88px;object-fit:cover;display:block}
@@ -112,7 +119,7 @@
       #title{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .content{padding:10px 14px 28px}
       .card{margin-bottom:10px}
-      .alert-line{margin:0 0 10px;line-height:1.45}
+      .alert-line{margin:0 0 10px;line-height:1.45;color:var(--text);font-size:14px}
       input,select,textarea,.btn{min-height:44px;font-size:16px}
       textarea{min-height:88px}
       .btn-sm{min-height:44px;padding:8px 12px;font-size:14px}
@@ -128,13 +135,13 @@
       .content,.drawer{overflow-x:hidden}
       table.cards{display:block;width:100%}
       table.cards thead{display:none}
-      table.cards tbody,table.cards tr{display:block}
-      table.cards tr{background:#0e1626;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
-      table.cards td{display:none;border:none;padding:0}
-      table.cards td[data-line="1"]{display:block;font-weight:700}
-      table.cards td[data-line="b"]{display:inline-block;margin-right:4px}
-      table.cards td[data-line="2"]{display:block;color:var(--muted);margin-top:4px}
-      table.cards td[data-line="3"]{display:inline;color:var(--muted);font-size:12px}
+      table.cards tbody{display:block}
+      table.cards tr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;color:var(--text)}
+      table.cards td{display:none;border:none;padding:0;color:var(--text)}
+      table.cards td[data-line="1"]{display:block;order:1;flex:1 1 auto;font-weight:700;font-size:15px;color:var(--text)}
+      table.cards td[data-line="b"]{display:inline-flex;order:2;margin:0}
+      table.cards td[data-line="2"]{display:block;order:3;flex:1 0 100%;color:var(--text);margin-top:2px;font-size:14px}
+      table.cards td[data-line="3"]{display:inline;order:4;color:var(--muted);font-size:12px}
       table.cards td[data-line="3"]+td[data-line="3"]::before{content:" · "}
       table.cards td[data-line="act"]{display:block;margin-top:8px}
       table.cards td[data-line="act"] .btn{width:100%}
@@ -165,7 +172,7 @@
       <button class="btn btn-sm" type="button" id="btnRefresh">새로고침</button>
     </div>
     <div class="content">
-      <div class="muted alert-line" id="alerts">알림 불러오는 중</div>
+      <div class="alert-line" id="alerts">알림 불러오는 중</div>
       <div class="muted mono" id="meta" style="font-size:11px"></div>
       <section class="panel active" id="p-dashboard"><div class="stats" id="dash"></div><div class="card" id="dashExtra"></div></section>
       <section class="panel" id="p-desk"></section>
@@ -265,8 +272,24 @@
     document.getElementById('drawer').classList.remove('show');
     document.getElementById('drawerBg').classList.remove('show');
   }
+  function statusTone(st) {
+    if (st === 'received' || st === 'waiting_assign') return 'b-wait';
+    if (st === 'assigned' || st === 'en_route' || st === 'repairing' || st === 'parts_wait') return 'b-go';
+    if (st === 'done' || st === 'closed' || st === 'followup') return 'b-done';
+    return 'b-stop';
+  }
+  function settleTone(st) {
+    const s = st || '';
+    if (s === '미수' || s === '부분수금') return 'b-unpaid';
+    if (s.indexOf('완납') >= 0 || s === '해당없음') return 'b-done';
+    return 'b-stop';
+  }
   function badge(st) {
-    return '<span class="badge">' + esc(STATUS[st] || st || '-') + '</span>';
+    return '<span class="badge ' + statusTone(st) + '">' + esc(STATUS[st] || st || '-') + '</span>';
+  }
+  function settleBadge(st) {
+    const s = st || '정산없음';
+    return '<span class="badge ' + settleTone(s) + '">' + esc(s) + '</span>';
   }
 
   // nav
@@ -506,7 +529,7 @@
         '<div class="desk-hit" data-id="' + esc(c.customer_id) + '">' +
         '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">' +
         '<div><b>' + esc(c.display_name) + '</b></div>' +
-        '<span class="pill">' + esc(c.status || '') + '</span></div>' +
+        '<span class="pill ' + (c.status === 'active' ? 'ok' : 'warn') + '">' + esc(c.status || '') + '</span></div>' +
         '<div class="mono" style="margin-top:4px">' + esc(c.primary_phone) + '</div>' +
         '<div class="muted" style="margin-top:2px">' + esc(c.address || '') + '</div></div>'
       ).join('');
@@ -625,7 +648,7 @@
         '<div class="k">전화</div><div class="mono">' + esc(c.primary_phone || '-') + '</div>' +
         '<div class="k">장비</div><div>' + esc(eq.name || t.equipment_id || '-') + '</div>' +
         '<div class="k">요청</div><div>' + esc(t.symptom || '-') + '</div>' +
-        '<div class="k">정산</div><div>' + esc(fin.settlement_status || '-') + '</div>' +
+        '<div class="k">정산</div><div>' + settleBadge(fin.settlement_status || '정산없음') + '</div>' +
         '</div>' +
         '<div class="preview-actions">' +
         '<button class="btn" type="button" id="pvClose">닫기</button>' +
@@ -732,7 +755,7 @@
     const filters = ['', 'waiting_assign', 'assigned', 'en_route', 'done', 'followup', 'closed'];
     el.innerHTML = '<div class="actions chips" id="bf"></div><div class="card" id="blist"></div>';
     document.getElementById('bf').innerHTML = filters.map((s) =>
-      '<button type="button" class="btn btn-sm" data-s="' + s + '">' + (s ? (STATUS[s] || s) : '전체') + '</button>'
+      '<button type="button" class="btn btn-sm' + ((status || '') === s ? ' btn-primary' : '') + '" data-s="' + s + '">' + (s ? (STATUS[s] || s) : '전체') + '</button>'
     ).join('');
     document.getElementById('bf').onclick = (e) => {
       const b = e.target.closest('button[data-s]');
@@ -747,7 +770,7 @@
         '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="1">' + esc(t.customer_display_name || '') +
         '</td><td data-line="2">' + esc(t.symptom) + '</td><td data-line="3">' + esc(whoLabel(t)) +
         '</td><td class="mono" data-line="3">' + esc(t.visit_at || t.scheduled_at || '') +
-        '</td><td data-line="b">' + esc(t.settlement_status || '정산없음') + '</td></tr>').join('') + '</tbody></table>';
+        '</td><td data-line="b">' + settleBadge(t.settlement_status || '정산없음') + '</td></tr>').join('') + '</tbody></table>';
     box.querySelectorAll('tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
   }
 
@@ -774,8 +797,8 @@
       <div class="actions" style="justify-content:space-between;align-items:center">
         <div><h3 style="margin:0">${esc(t.number)}</h3>
           <div style="margin-top:6px">${badge(t.status)}
-            <span class="badge" id="dSettleBadge">${esc(fin.settlement_status || '정산없음')}</span>
-            ${t.is_repeat === 'true' ? '<span class="badge">재고장</span>' : ''}
+            <span id="dSettleBadge">${settleBadge(fin.settlement_status || '정산없음')}</span>
+            ${t.is_repeat === 'true' ? '<span class="badge b-wait">재고장</span>' : ''}
           </div>
         </div>
         <button class="btn btn-sm" type="button" id="dClose">닫기</button>
@@ -1221,7 +1244,7 @@
         <button class="btn" type="button" id="fSaveGo">저장 후 출장</button>
         <button class="btn" type="button" id="fSaveConsult">저장 후 상담종결</button>
       </div>
-      <div style="margin-top:10px" class="badge">${hint.warranty === 'free' ? '무상 가능' : '유상'} · ${esc(hint.reason || '')}</div>
+      <div style="margin-top:10px"><span class="pill ${hint.warranty === 'free' ? 'ok' : 'warn'}">${hint.warranty === 'free' ? '무상 가능' : '유상'}</span> <span class="muted" style="font-size:11px">${esc(hint.reason || '')}</span></div>
       <h4 style="margin-top:14px">장비</h4>
       <div id="fEq"></div>
       <div class="row" style="margin-top:8px">
@@ -1409,7 +1432,7 @@
       return `<div class="card" style="margin-top:10px">
         <div class="actions" style="justify-content:space-between;align-items:center">
           <div><b>${esc(u.name)}</b> <span class="muted mono">${esc(u.login)}</span>
-            <span class="badge">${esc(u.role)}</span> <span class="badge">${esc(u.employment_status)}</span></div>
+            <span class="badge b-go">${esc(u.role)}</span> <span class="badge ${u.employment_status === 'active' ? 'b-done' : 'b-stop'}">${esc(u.employment_status)}</span></div>
           <div>${u.employment_status === 'active'
             ? '<button class="btn btn-sm" type="button" data-leave="' + esc(u.user_id) + '">휴직</button> ' +
               '<button class="btn btn-sm btn-danger" type="button" data-out="' + esc(u.user_id) + '">퇴사</button>'
@@ -1549,7 +1572,7 @@
       ? '<table class="cards"><thead><tr><th>시각</th><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산뱃지</th><th></th></tr></thead><tbody>' +
         mine.map((t) => '<tr><td class="mono" data-line="2">' + esc(t.visit_at || t.scheduled_at) + '</td><td class="mono" data-line="3">' + esc(t.number) +
           '</td><td data-line="1">' + esc(t.customer_display_name || '') + '</td><td data-line="3">' + esc(whoLabel(t)) +
-          '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + esc(t.settlement_status || '정산없음') +
+          '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + settleBadge(t.settlement_status || '정산없음') +
           '</td><td data-line="act"><button class="btn btn-sm" type="button" data-open="' +
           esc(t.ticket_id) + '">서랍</button></td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">이 날짜 일정 없음</div>';
@@ -1778,8 +1801,8 @@
           rows.map((r) => '<tr class="clickable" data-open="' + esc(r.ticket_id) + '"><td class="mono" data-line="3">' +
             esc((r.completed_at || r.scheduled_at || '').slice(0, 10)) + '</td><td class="mono" data-line="3">' +
             esc(r.number || r.ticket_id) + '</td><td data-line="1">' + esc(r.customer_name || '') + '</td><td data-line="2">' +
-            moneyFmt(r.travel_fee) + '</td><td data-line="3">' + moneyFmt(r.repair_total) + '</td><td data-line="b"><span class="badge">' +
-            esc(r.settlement_status) + '</span></td><td data-line="2">' + moneyFmt(r.settlement_paid) + '</td></tr>').join('') +
+            moneyFmt(r.travel_fee) + '</td><td data-line="3">' + moneyFmt(r.repair_total) + '</td><td data-line="b">' +
+            settleBadge(r.settlement_status) + '</td><td data-line="2">' + moneyFmt(r.settlement_paid) + '</td></tr>').join('') +
           '</tbody></table>'
         : '<div class="empty">해당 기간 수금 없음</div>') +
         '<div class="card" style="margin-top:10px"><b>합계</b> 출장비 ' + moneyFmt(data.sum_travel) +
@@ -1835,7 +1858,7 @@
             '</td><td data-line="act">' + (e.status === 'pending' && money
               ? '<button class="btn btn-sm btn-primary" type="button" data-ap="' + esc(e.expense_id) + '">승인</button> ' +
                 '<button class="btn btn-sm btn-danger" type="button" data-rj="' + esc(e.expense_id) + '">반려</button>'
-              : '<span class="badge">' + esc(e.status) + '</span>') +
+              : '<span class="badge ' + (e.status === 'approved' ? 'b-done' : 'b-unpaid') + '">' + esc(e.status) + '</span>') +
             '</td></tr>').join('') + '</tbody></table>'
         : '<div class="empty">해당 상태 경비 없음</div>';
       expBody.querySelectorAll('[data-rc]').forEach((b) => b.onclick = () => alert(b.dataset.rc));
@@ -1955,7 +1978,7 @@
     const table = (rows) => (rows && rows.length)
       ? '<table class="cards"><thead><tr><th>번호</th><th>고객표시명</th><th>담당이름</th><th>상태</th><th>정산</th><th></th></tr></thead><tbody>' +
         rows.map((t) => '<tr><td class="mono" data-line="3">' + esc(t.number) + '</td><td data-line="1">' + esc(t.customer_display_name || '') +
-          '</td><td data-line="3">' + esc(whoLabel(t)) + '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + esc(t.settlement_status || '') +
+          '</td><td data-line="3">' + esc(whoLabel(t)) + '</td><td data-line="b">' + badge(t.status) + '</td><td data-line="b">' + settleBadge(t.settlement_status || '정산없음') +
           '</td><td data-line="act"><button class="btn btn-sm" type="button" data-id="' + esc(t.ticket_id) + '">열기</button></td></tr>').join('') +
         '</tbody></table>'
       : '<div class="empty">없음</div>';

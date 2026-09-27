@@ -6,13 +6,14 @@
   <title>빅워시 HQ - 로그인</title>
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #121a2b;
-      --line: #243149;
-      --text: #e7eefc;
-      --muted: #8fa3c1;
+      --bg: #070b14;
+      --panel: #101827;
+      --line: #3d4f6e;
+      --text: #f3f7ff;
+      --muted: #c5d4ea;
       --accent: #3de0c7;
-      --danger: #ff6b7a;
+      --danger: #ff8a95;
+      --input: #0b1220;
       --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       --sans: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Noto Sans KR", sans-serif;
     }
@@ -57,10 +58,10 @@
     }
     input[type="text"], input[type="password"] {
       width: 100%; padding: 12px 14px; border: 1px solid var(--line);
-      border-radius: 10px; font-size: 14px; background: #0e1626; color: var(--text);
+      border-radius: 10px; font-size: 16px; background: var(--input); color: var(--text); min-height: 44px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
-    input::placeholder { color: #5f7394; }
+    input::placeholder { color: #9db0c9; }
     input:focus {
       outline: none; border-color: rgba(61, 224, 199, 0.55);
       box-shadow: 0 0 0 3px rgba(61, 224, 199, 0.12);
