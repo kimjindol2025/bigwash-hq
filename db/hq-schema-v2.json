@@ -1,0 +1,76 @@
+{
+  "schema": "bigwash-hq-v2",
+  "version": "v2",
+  "tables": [
+    {
+      "name": "hq_customer_extra",
+      "primary_key": "customer_id",
+      "columns": [
+        {"name": "customer_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "region_id", "type": "string", "indexed": true},
+        {"name": "grade", "type": "string"},
+        {"name": "settle_memo", "type": "string"},
+        {"name": "warranty_memo", "type": "string"},
+        {"name": "updated_at", "type": "string"}
+      ]
+    },
+    {
+      "name": "hq_customer_purchases",
+      "primary_key": "purchase_id",
+      "columns": [
+        {"name": "purchase_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "customer_id", "type": "string", "required": true, "indexed": true},
+        {"name": "product_id", "type": "string", "required": true, "indexed": true},
+        {"name": "fulfill_type", "type": "string", "required": true},
+        {"name": "confirm_date", "type": "string", "required": true, "indexed": true},
+        {"name": "equipment_id", "type": "string"},
+        {"name": "note", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_ticket_assignees",
+      "primary_key": "row_id",
+      "columns": [
+        {"name": "row_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "required": true, "indexed": true},
+        {"name": "user_id", "type": "string", "indexed": true},
+        {"name": "contractor_name", "type": "string"},
+        {"name": "kind", "type": "string", "required": true},
+        {"name": "is_primary", "type": "string"},
+        {"name": "day_pay_amount", "type": "number"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_cart_lines",
+      "primary_key": "line_id",
+      "columns": [
+        {"name": "line_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "ticket_id", "type": "string", "required": true, "indexed": true},
+        {"name": "kind", "type": "string", "required": true},
+        {"name": "product_id", "type": "string"},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "qty", "type": "number"},
+        {"name": "price", "type": "number"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    },
+    {
+      "name": "hq_contractors",
+      "primary_key": "contractor_id",
+      "columns": [
+        {"name": "contractor_id", "type": "string"},
+        {"name": "company_id", "type": "string", "required": true, "indexed": true},
+        {"name": "name", "type": "string", "required": true},
+        {"name": "phone", "type": "string"},
+        {"name": "status", "type": "string"},
+        {"name": "created_at", "type": "string", "required": true}
+      ]
+    }
+  ]
+}

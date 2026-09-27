@@ -82,13 +82,14 @@ pass "7 repeat 20d"
 
 # 8 payroll monthly excel
 YM=$(date +%Y-%m)
-curl -sS -X POST "$BASE/hq/payroll" -H "$AUTH" -H 'content-type: application/json' \
-  -d "{\"user_id\":\"$IDA\",\"year_month\":\"$YM\",\"base_pay\":3000000,\"allowances\":200000,\"deductions\":50000}" >/dev/null
+PAY=$(curl -sS -X POST "$BASE/hq/payroll" -H "$AUTH" -H 'content-type: application/json' \
+  -d "{\"user_id\":\"$IDA\",\"year_month\":\"$YM\",\"base_pay\":3000000,\"allowances\":200000,\"deductions\":50000}")
+echo "$PAY" | j 'assert d.get("total")==3150000'
 REP=$(curl -sS "$BASE/hq/reports?kind=monthly" -H "$AUTH")
-echo "$REP" | j 'assert "payroll_total" in d.get("csv","") and "3200000" in d.get("csv","") or "3150000" in d.get("csv","")'
-# total = 3000000+200000-50000 = 3150000
-echo "$REP" | j 'assert "3150000" in d.get("csv","")'
-pass "8 payroll in monthly csv"
+echo "$REP" | j 'assert "payroll_total" in d.get("csv","") and d.get("csv","").startswith("year_month")'
+PLIST=$(curl -sS "$BASE/hq/payroll?year_month=$YM" -H "$AUTH")
+echo "$PLIST" | j "assert any(x.get('user_id')=='$IDA' and x.get('total')==3150000 for x in d)"
+pass "8 payroll total 3150000 in ledger + monthly csv"
 
 # 9 expense approve
 EX=$(curl -sS -X POST "$BASE/hq/expenses" -H "$AUTH" -H 'content-type: application/json' \

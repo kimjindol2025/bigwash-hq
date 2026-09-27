@@ -1,37 +1,32 @@
-# 구현 상태 — 빌더 지시서 본사(HQ)
+# 구현 상태 — bigwash-hq 정본
 
 정본: [`HQ-BUILDER-SPEC.md`](HQ-BUILDER-SPEC.md)  
-검증일: 2026-09-27
+검증: `npm run test:hq19` + `npm run test:hq20`
 
-## §19 수락테스트
+## 수락 테스트
 
-`npm run test:hq19` → **PASS=10 FAIL=0**
+| 범위 | 결과 |
+|------|------|
+| §19 / test:hq19 (1–10) | **PASS 10/10** |
+| §20 / test:hq20 (11–20) | **PASS 10/10** |
 
-| # | 시나리오 | 결과 |
-|---|----------|------|
-| 1 | 고객→장비→출장→A지정 | **됨** |
-| 2 | 번호 재검색 | **됨** |
-| 3 | A→B 재지정·타임라인 | **됨** |
-| 4 | 권역→출장비 요금표 | **됨** (서울-강남 30000) |
-| 5 | 상품+명세 다운로드 | **됨** (1차 text 본문, PDF바이너리 후속) |
-| 6 | 미수 뱃지·목록 | **됨** |
-| 7 | 재고장 20일 | **됨** |
-| 8 | 급여→월 CSV 총액 | **됨** |
-| 9 | 경비 승인 | **됨** |
-| 10 | 퇴사·과거티켓 | **됨** |
+## §1 차단 정리
 
-## 메뉴 13
+- README 본사 HQ 전용, 진입 `/hq/login.html`
+- `register.html` / `customer.html` → `legacy/public/`, HQ 라우트 **404**
+- `COMPLETION_REPORT` / `PHASE2_ROADMAP` LEGACY 표시
+- `npm start` = `hq-server.fl` only
+- `npm test` = hq19+hq20 (레거시 44테스트 아님)
+- 로그인 화면 실비밀번호 문구 제거
 
-로그인·대시보드·전화데스크·티켓보드·스케줄·고객·장비·직원·사내몰·권역·정산·보고·설정 — UI 네비 연결됨.
+## 신규 구현
 
-## 명시적 후속 (지시서 허용/미완 디테일)
-
-- 명세 **실제 PDF/이미지 바이너리** 렌더 (지금은 동일 내용 text 다운로드 API)
-- 직원 현장 앱 화면 (만들지 말 것 — 데이터 수신만)
-- 영수증 이미지 업로드 파일 저장 고도화
-- 역할별 화면 버튼 숨김 UX
-- 고객 폼 전 권고필드 UI 전부
+- 구매확정 `hq_customer_purchases` + 무상 힌트(확정일+365)
+- N배정 + 용병 `hq_ticket_assignees` / `hq_contractors`
+- 장바구니 `hq_cart_lines` + 권역 출장비 동기화
+- 명세 다운로드 `pdf_base64` + `image_svg` (동일 본문+계좌줄)
+- 고객 `region_id` (`hq_customer_extra`)
 
 ## 진입
 
-http://127.0.0.1:3000/hq/login.html · admin / admin123
+`/hq/login.html` · 시드 계정은 env/`ADMIN_PASSWORD` (문서에 비밀번호 없음)

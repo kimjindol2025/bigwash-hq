@@ -1,0 +1,13 @@
+(load "/home/kim/kim/projects/bigwash-as/src/db.fl")
+(define SCHEMA_PATH "/home/kim/kim/projects/bigwash-as/db/hq-schema-v2.json")
+
+(defn provision-table [$table]
+  (let [$r (db-create-table $table)]
+    (println (str "[hq-v2] " (get $table "name") " status=" (get $r "status")))))
+
+(if (= AFLDB_ADMIN_KEY "")
+  (println "[hq-v2] ERROR keys")
+  (let [$schema (json-parse (file-read SCHEMA_PATH))]
+    (do
+      (reduce (fn [$a $t] (do (provision-table $t) (append $a [1]))) [] (get $schema "tables"))
+      (println "[hq-v2] complete"))))

@@ -559,8 +559,18 @@
       '<div class="actions"><button class="btn btn-sm" type="button" id="dFin">권역·출장비 적용</button></div>' +
       '<h4 style="margin-top:12px">상태 전이</h4><div class="actions" id="dNext"></div>' +
       '<h4 style="margin-top:12px">정산 상태</h4><div class="actions" id="dSettle"></div>' +
+      '<h4 style="margin-top:12px">배정 1..N + 용병</h4>' +
+      '<div class="row"><div class="grow"><label>정규 추가</label><select id="dAddStaff">' + staffOptions() + '</select></div>' +
+      '<div class="grow"><label>용병 이름</label><input id="dContractor" placeholder="용병김" /></div></div>' +
+      '<div class="row" style="margin-top:6px"><div class="grow"><label>용병 일당</label><input id="dDayPay" type="number" value="150000" /></div>' +
+      '<button class="btn btn-sm btn-primary" type="button" id="dAsgSave">배정 추가</button></div>' +
+      '<div id="dAsgList" class="mono" style="font-size:12px;margin-top:8px"></div>' +
+      '<h4 style="margin-top:12px">장바구니</h4>' +
+      '<div class="actions"><button class="btn btn-sm" type="button" id="dCartPart">부품줄 추가</button>' +
+      '<button class="btn btn-sm" type="button" id="dCartTravel">출장비 동기화</button></div>' +
+      '<div id="dCart" class="mono" style="font-size:12px;margin-top:8px"></div>' +
       '<h4 style="margin-top:12px">명세 발행</h4>' +
-      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dDoc">명세 발행·다운로드</button></div>' +
+      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dDoc">명세 PDF·이미지</button></div>' +
       '<h4 style="margin-top:12px">타임라인</h4>' +
       '<div class="mono" style="font-size:12px">' + (data.events || []).map((e) =>
         '<div>' + esc(e.at) + ' · ' + esc(e.type) + ' ' + esc(e.from_status) + '→' + esc(e.to_status) + ' ' + esc(e.memo) + '</div>'
@@ -612,19 +622,71 @@
         toast('정산 ' + b.dataset.st); openTicket(id);
       } catch (e) { toast(e.message, true); }
     });
+    async function refreshAsgCart() {
+      const asg = await api('/hq/tickets/' + id + '/assignees');
+      document.getElementById('dAsgList').innerHTML = (asg || []).map((a) =>
+        '<div>' + esc(a.kind) + ' ' + esc(a.user_id || a.contractor_name) +
+        (a.is_primary === 'true' ? ' [주]' : '') +
+        (a.day_pay_amount ? (' 일당 ' + a.day_pay_amount) : '') + '</div>'
+      ).join('') || '<div class="muted">배정 없음</div>';
+      const cart = await api('/hq/tickets/' + id + '/cart');
+      const sum = (cart || []).reduce((s, l) => s + (Number(l.qty || 1) * Number(l.price || 0)), 0);
+      document.getElementById('dCart').innerHTML = (cart || []).map((l) =>
+        '<div>' + esc(l.kind) + ' ' + esc(l.name) + ' ×' + esc(l.qty) + ' @' + esc(l.price) + '</div>'
+      ).join('') + '<div><b>합계 ' + sum + '</b></div>';
+    }
+    await refreshAsgCart();
+    document.getElementById('dAsgSave').onclick = async () => {
+      const staffId = document.getElementById('dAddStaff').value;
+      const cname = document.getElementById('dContractor').value.trim();
+      const pay = Number(document.getElementById('dDayPay').value || 0);
+      const assignees = [];
+      if (staffId) assignees.push({ kind: 'staff', user_id: staffId, is_primary: 'true' });
+      if (cname) assignees.push({ kind: 'contractor', contractor_name: cname, day_pay_amount: pay, is_primary: 'false' });
+      if (!assignees.length) return toast('정규 또는 용병 입력', true);
+      try {
+        await api('/hq/tickets/' + id + '/assignees', { method: 'POST', body: JSON.stringify({ assignees }) });
+        toast('배정 저장'); openTicket(id);
+      } catch (e) { toast(e.message, true); }
+    };
+    document.getElementById('dCartPart').onclick = async () => {
+      showModal('<h3>부품 추가</h3><label>이름</label><input id="cpn" value="부품" />' +
+        '<label style="margin-top:8px">수량</label><input id="cpq" type="number" value="1" />' +
+        '<label style="margin-top:8px">단가</label><input id="cpp" type="number" value="10000" />' +
+        '<div class="actions"><button class="btn" type="button" id="cpx">취소</button>' +
+        '<button class="btn btn-primary" type="button" id="cps">추가</button></div>');
+      document.getElementById('cpx').onclick = closeModal;
+      document.getElementById('cps').onclick = async () => {
+        await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
+          kind: 'part', name: document.getElementById('cpn').value,
+          qty: Number(document.getElementById('cpq').value || 1),
+          price: Number(document.getElementById('cpp').value || 0)
+        })});
+        toast('부품 추가'); closeModal(); refreshAsgCart();
+      };
+    };
+    document.getElementById('dCartTravel').onclick = async () => {
+      await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
+      toast('출장비 동기화'); refreshAsgCart();
+    };
     document.getElementById('dDoc').onclick = async () => {
       try {
+        const cart = await api('/hq/tickets/' + id + '/cart');
+        const lines = (cart || []).filter((l) => l.kind === 'part').map((l) => ({ name: l.name, qty: l.qty, price: l.price }));
         const doc = await api('/hq/documents', {
           method: 'POST',
-          body: JSON.stringify({ ticket_id: id, doc_type: 'invoice', labor_fee: 50000, bill_type: t.bill_type || 'paid', lines: [{ name: '부품', qty: 1, price: 0 }] })
+          body: JSON.stringify({ ticket_id: id, doc_type: 'invoice', labor_fee: 50000, bill_type: t.bill_type || 'paid', lines })
         });
-        const dl = await api('/hq/documents/' + doc.doc_id + '/download?format=text');
+        const dl = await api('/hq/documents/' + doc.doc_id + '/download?format=pdf');
         showModal('<h3>' + esc(dl.title) + '</h3><pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:10px 0">' +
           esc(dl.content) + '</pre><div class="actions"><button class="btn" type="button" id="mClose">닫기</button>' +
-          '<a class="btn btn-primary" id="mDl" download="' + esc(doc.number) + '.txt">다운로드</a></div>');
+          '<a class="btn btn-primary" id="mPdf" download="' + esc(doc.number) + '.pdf">PDF</a>' +
+          '<a class="btn btn-primary" id="mSvg" download="' + esc(doc.number) + '.svg">이미지(SVG)</a></div>');
         document.getElementById('mClose').onclick = closeModal;
-        const blob = new Blob([dl.content || ''], { type: 'text/plain;charset=utf-8' });
-        document.getElementById('mDl').href = URL.createObjectURL(blob);
+        const pdfBin = atob(dl.pdf_base64 || '');
+        const pdfArr = new Uint8Array(pdfBin.length); for (let i = 0; i < pdfBin.length; i++) pdfArr[i] = pdfBin.charCodeAt(i);
+        document.getElementById('mPdf').href = URL.createObjectURL(new Blob([pdfArr], { type: 'application/pdf' }));
+        document.getElementById('mSvg').href = URL.createObjectURL(new Blob([dl.image_svg || ''], { type: 'image/svg+xml' }));
       } catch (e) { toast(e.message, true); }
     };
   }
@@ -732,6 +794,31 @@
         await deskSearch();
       }, 50);
     };
+    // purchase confirm
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'btn btn-primary';
+    buyBtn.type = 'button';
+    buyBtn.textContent = '구매확정';
+    buyBtn.onclick = async () => {
+      const products = await api('/hq/products');
+      if (!products.length) return toast('먼저 사내몰 상품 등록', true);
+      showModal('<h3>구매확정</h3><label>상품</label><select id="bp">' +
+        products.map((p) => '<option value="' + esc(p.product_id) + '">' + esc(p.name) + '</option>').join('') +
+        '</select><label style="margin-top:8px">유형</label><select id="bf"><option value="ship">발송</option><option value="install">설치</option></select>' +
+        '<label style="margin-top:8px">확정일</label><input id="bd" type="date" value="' + new Date().toISOString().slice(0,10) + '" />' +
+        '<div class="actions"><button class="btn" type="button" id="bx">취소</button><button class="btn btn-primary" type="button" id="bs">저장</button></div>');
+      document.getElementById('bx').onclick = closeModal;
+      document.getElementById('bs').onclick = async () => {
+        await api('/hq/purchases', { method: 'POST', body: JSON.stringify({
+          customer_id: id,
+          product_id: document.getElementById('bp').value,
+          fulfill_type: document.getElementById('bf').value,
+          confirm_date: document.getElementById('bd').value
+        })});
+        toast('구매확정 저장'); closeModal();
+      };
+    };
+    document.querySelector('#modalBody .actions').appendChild(buyBtn);
   }
 
   async function renderEquipment() {
