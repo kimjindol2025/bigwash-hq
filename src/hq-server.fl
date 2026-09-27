@@ -670,6 +670,27 @@
                   (json-created {"photo_id" $pid "side" $side "slot" $slot}))
                 (catch $e (json-err 500 (str "upload failed: " $e)))))))))))
 
+(defn handle-photo-content [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$pid (server-req-param $req "photoId")
+            $row (db-row (db-get-row "hq_photos" $pid))]
+        (if (or (nil? $row) (not (= (get $row "company_id") (cid $gate))))
+          (json-err 404 "Photo not found")
+          (try
+            (let [$b64 (file-read (get $row "file_path"))
+                  $mime (?? (get $row "mime") "image/jpeg")
+                  $data-url (if (str-starts-with $b64 "data:")
+                              $b64
+                              (str "data:" $mime ";base64," $b64))]
+              (json-ok {"photo_id" $pid
+                        "side" (get $row "side")
+                        "slot" (get $row "slot")
+                        "mime" $mime
+                        "data_url" $data-url}))
+            (catch $e (json-err 500 (str "photo read failed: " $e))))))))
+
 (defn dash-cache-path [$company]
   (str "/tmp/bigwash-hq-dash-" $company ".json"))
 
@@ -862,6 +883,7 @@
 (server-post "/hq/tickets/:id/schedule" "handle-ticket-schedule")
 (server-post "/hq/tickets/:id/transition" "handle-ticket-transition")
 (server-post "/hq/tickets/:id/photos" "handle-photo-upload")
+(server-get "/hq/photos/:photoId/content" "handle-photo-content")
 (server-post "/hq/calls" "handle-call-create")
 (server-get "/hq/schedule" "handle-schedule")
 (server-get "/hq/followups" "handle-followup-list")

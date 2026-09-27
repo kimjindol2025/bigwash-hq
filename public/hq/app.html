@@ -78,6 +78,11 @@
     .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);margin-right:6px}
     .pill.ok{border-color:rgba(61,220,151,.4);color:var(--ok)}
     .pill.warn{border-color:rgba(255,176,32,.4);color:var(--warn)}
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:8px}
+    .photo-thumb{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#0a101c;cursor:pointer;position:relative}
+    .photo-thumb img{width:100%;height:88px;object-fit:cover;display:block}
+    .photo-thumb .cap{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:10px;background:rgba(0,0,0,.65);color:#fff}
+    .photo-full{max-width:100%;max-height:70vh;border-radius:8px;display:block;margin:0 auto}
     @media(max-width:720px){
       body{flex-direction:column}
       .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;gap:4px;padding:8px}
@@ -798,12 +803,47 @@
         : '<div class="muted">장바구니 비어 있음 — 몰 부품을 담으세요</div>';
     }
 
-    async function refreshPhotos(force) {
+        async function refreshPhotos(force) {
       const det = force ? await api('/hq/tickets/' + id) : data;
-      const photos = det.photos || [];
-      document.getElementById('dPhotos').innerHTML = photos.length
-        ? photos.map((p) => '<div class="badge" style="margin:2px">' + esc(p.side) + ' #' + esc(p.slot) + '</div>').join(' ')
-        : '<span class="muted">사진 없음</span>';
+      const photos = (det.photos || []).filter((p) => p.side === 'before' || p.side === 'after' || p.side === 'log');
+      if (!photos.length) {
+        document.getElementById('dPhotos').innerHTML = '<span class="muted">사진 없음</span>';
+        return;
+      }
+      const before = photos.filter((p) => p.side === 'before').sort((a,b) => Number(a.slot)-Number(b.slot));
+      const after = photos.filter((p) => p.side === 'after').sort((a,b) => Number(a.slot)-Number(b.slot));
+      const logs = photos.filter((p) => p.side === 'log');
+      document.getElementById('dPhotos').innerHTML = '<div class="muted" style="margin-bottom:4px">작업 전</div><div class="photo-grid" id="phBefore"></div>' +
+        '<div class="muted" style="margin:10px 0 4px">작업 후</div><div class="photo-grid" id="phAfter"></div>' +
+        (logs.length ? '<div class="muted" style="margin:10px 0 4px">일지 첨부</div><div class="photo-grid" id="phLog"></div>' : '');
+
+      async function fill(gridId, list, label) {
+        const grid = document.getElementById(gridId);
+        if (!grid) return;
+        if (!list.length) {
+          grid.innerHTML = '<div class="muted">없음</div>';
+          return;
+        }
+        grid.innerHTML = list.map((p) =>
+          '<div class="photo-thumb" data-pid="' + esc(p.photo_id) + '"><div class="cap">' + label + ' #' + esc(p.slot) + '</div></div>'
+        ).join('');
+        for (const el of grid.querySelectorAll('.photo-thumb')) {
+          try {
+            const c = await api('/hq/photos/' + el.dataset.pid + '/content');
+            el.innerHTML = '<img src="' + c.data_url + '" alt="" /><div class="cap">' + label + '</div>';
+            el.onclick = () => {
+              showModal('<h3>' + label + ' 원본</h3><img class="photo-full" src="' + c.data_url + '" alt="" />' +
+                '<div class="actions"><button class="btn" type="button" id="phClose">닫기</button></div>');
+              document.getElementById('phClose').onclick = closeModal;
+            };
+          } catch (e) {
+            el.innerHTML = '<div class="cap">로드실패</div>';
+          }
+        }
+      }
+      await fill('phBefore', before, '전');
+      await fill('phAfter', after, '후');
+      if (logs.length) await fill('phLog', logs, '일지');
     }
 
     await refreshAsgCart(true);
