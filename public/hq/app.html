@@ -630,8 +630,12 @@
       '<h4 style="margin-top:12px">권역</h4>' +
       '<select id="dRegion">' + regionOptions(fin.region_id) + '</select>' +
       '<div class="actions"><button class="btn btn-sm" type="button" id="dFin">권역·출장비 적용</button></div>' +
-      '<h4 style="margin-top:12px">장바구니</h4>' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dCartPart">부품 추가</button>' +
+      '<h4 style="margin-top:12px">장바구니 (출장 전용)</h4>' +
+      '<div class="muted" style="font-size:12px;margin-bottom:6px">사내몰 상품 → 이 티켓에 담기. 출장비는 권역 1줄 자동.</div>' +
+      '<div class="actions">' +
+      '<button class="btn btn-sm btn-primary" type="button" id="dCartMall">몰에서 담기</button>' +
+      '<button class="btn btn-sm" type="button" id="dCartPart">수기 부품</button>' +
+      '<button class="btn btn-sm" type="button" id="dCartLabor">공임</button>' +
       '<button class="btn btn-sm" type="button" id="dCartTravel">출장비 동기화</button></div>' +
       '<div id="dCart" class="mono" style="font-size:12px;margin-top:8px"></div>' +
       '<h4 style="margin-top:12px">상태 전이</h4><div class="actions" id="dNext"></div>' +
@@ -697,8 +701,35 @@
         toast('출장비 ' + r.travel_fee + '원'); openTicket(id);
       } catch (e) { toast(e.message, true); }
     };
+    document.getElementById('dCartMall').onclick = async () => {
+      const products = await api('/hq/products');
+      const sellable = (products || []).filter((p) => p.status !== 'hidden');
+      if (!sellable.length) return toast('사내몰에 판매중 상품이 없습니다', true);
+      showModal('<h3>사내몰에서 담기</h3>' +
+        '<label>상품</label><select id="cmSel">' +
+        sellable.map((p) => '<option value="' + esc(p.product_id) + '" data-price="' + esc(p.sale_price) + '" data-name="' + esc(p.name) + '">' +
+          esc(p.name) + ' · ' + esc(p.sale_price) + '원</option>').join('') +
+        '</select>' +
+        '<label style="margin-top:8px">수량</label><input id="cmQty" type="number" value="1" min="1" />' +
+        '<div class="actions"><button class="btn" type="button" id="cmx">취소</button>' +
+        '<button class="btn btn-primary" type="button" id="cms">장바구니에 담기</button></div>');
+      document.getElementById('cmx').onclick = closeModal;
+      document.getElementById('cms').onclick = async () => {
+        const sel = document.getElementById('cmSel');
+        const opt = sel.options[sel.selectedIndex];
+        await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
+          kind: 'part',
+          product_id: sel.value,
+          name: opt.getAttribute('data-name') || opt.textContent,
+          qty: Number(document.getElementById('cmQty').value || 1),
+          price: Number(opt.getAttribute('data-price') || 0)
+        })});
+        await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
+        toast('장바구니에 담김'); closeModal(); refreshAsgCart();
+      };
+    };
     document.getElementById('dCartPart').onclick = () => {
-      showModal('<h3>부품 추가</h3><label>이름</label><input id="cpn" value="부품" />' +
+      showModal('<h3>수기 부품</h3><label>이름</label><input id="cpn" value="부품" />' +
         '<label style="margin-top:8px">수량</label><input id="cpq" type="number" value="1" />' +
         '<label style="margin-top:8px">단가</label><input id="cpp" type="number" value="10000" />' +
         '<div class="actions"><button class="btn" type="button" id="cpx">취소</button>' +
@@ -711,6 +742,21 @@
           price: Number(document.getElementById('cpp').value || 0)
         })});
         toast('부품 추가'); closeModal(); refreshAsgCart();
+      };
+    };
+    document.getElementById('dCartLabor').onclick = async () => {
+      showModal('<h3>공임</h3><label>난이도/이름</label>' +
+        '<select id="cln"><option value="공임-하">공임-하</option><option value="공임-중">공임-중</option><option value="공임-상">공임-상</option></select>' +
+        '<label style="margin-top:8px">금액</label><input id="clp" type="number" value="50000" />' +
+        '<div class="actions"><button class="btn" type="button" id="clx">취소</button>' +
+        '<button class="btn btn-primary" type="button" id="cls">추가</button></div>');
+      document.getElementById('clx').onclick = closeModal;
+      document.getElementById('cls').onclick = async () => {
+        await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
+          kind: 'labor', name: document.getElementById('cln').value,
+          qty: 1, price: Number(document.getElementById('clp').value || 0)
+        })});
+        toast('공임 추가'); closeModal(); refreshAsgCart();
       };
     };
     document.getElementById('dCartTravel').onclick = async () => {
@@ -1139,8 +1185,10 @@
       const m = String(p.description || '').match(/fulfill_type=([a-z]+)/);
       return (p.fulfill_type || (m && m[1]) || 'part');
     };
-    el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between"><h3>사내몰 상품</h3>
-      <button class="btn btn-primary" type="button" id="pAdd">＋ 상품</button></div><div id="pList"></div></div>`;
+    el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between"><h3>사내몰 상품 마스터</h3>
+      <button class="btn btn-primary" type="button" id="pAdd">＋ 상품</button></div>
+      <p class="muted" style="margin-bottom:10px">장바구니는 여기가 아니라 <b>출장 티켓 서랍</b>에 있습니다. 보드에서 티켓을 연 뒤 「몰에서 담기」를 누르세요.</p>
+      <div id="pList"></div></div>`;
     document.getElementById('pList').innerHTML = rows.length
       ? '<table><thead><tr><th>이름</th><th>카테고리</th><th>유형</th><th>판매가</th><th>원가</th><th>SKU</th><th>상태</th></tr></thead><tbody>' +
         rows.map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.category) + '</td><td>' + esc(fulfillOf(p)) +
