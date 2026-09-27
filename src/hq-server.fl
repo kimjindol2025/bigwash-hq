@@ -1,7 +1,7 @@
 ;; bigwash HQ 1차 — AFJ + AFL-DB
 ;; 본사 PC SaaS: CRM + AS + Workforce
 
-(define PORT (str-to-num (?? (shell_env "PORT") "3000")))
+(define PORT (str-to-num (?? (shell_env "HQ_PORT") (?? (shell_env "PORT") "30000"))))
 (define ROOT (?? (shell_env "BIGWASH_AS_ROOT") "/home/kim/kim/projects/bigwash-as"))
 (define JWT_SECRET (?? (shell_env "JWT_SECRET") "bigwash-hq-secret-2026"))
 (define JWT_TTL (str-to-num (?? (shell_env "JWT_TTL_SEC") "86400")))
@@ -1007,5 +1007,5 @@
 (server-post "/as/register" "handle-legacy-gone")
 (server-get "/customer/requests" "handle-legacy-gone")
 
-(println (str "[bigwash-hq] starting :" PORT " company=" COMPANY_ID))
+(println (str "[bigwash-hq] :" PORT))
 (server-start PORT)

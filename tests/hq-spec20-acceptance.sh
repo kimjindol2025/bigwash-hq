@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HQ-BUILDER-SPEC §20 추가 수락 11–20 (+ 레거시 차단)
 set -euo pipefail
-BASE="${BASE_URL:-http://127.0.0.1:3000}"
+BASE="${HQ_BASE:-${BASE_URL:-http://127.0.0.1:30000}}"
 PASS=0; FAIL=0
 pass(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 fail(){ echo "FAIL  $1 — $2"; FAIL=$((FAIL+1)); }

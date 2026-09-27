@@ -9,10 +9,17 @@
 ```bash
 npm run provision          # HQ 스키마 (+ ext)
 bash scripts/provision-hq-ext.sh   # 확장 테이블 (있으면)
-npm start                  # AFJ HQ only → :3000
+npm start                  # AFJ HQ. 기본 :30000 (30000–30099)
 ```
 
-브라우저: **`/hq/login.html`**
+브라우저: **`/hq/login.html`**  
+`HQ_PORT` 가 있으면 그 포트만 씁니다. 출력: `[bigwash-hq] :30000`
+
+현장 앱은 다른 레포입니다. 같이 띄울 때:
+
+```bash
+bash scripts/run-pair.sh
+```
 
 초기 관리자 계정은 환경변수·시드로만 두고, 문서에 실비밀번호를 적지 않습니다.  
 로컬 개발 시드가 켜져 있으면 최초 로그인 후 비밀번호를 바꾸세요. (`ADMIN_PASSWORD` env)

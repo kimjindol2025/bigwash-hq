@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HQ-BUILDER-SPEC.md §19 수락테스트 10
 set -euo pipefail
-BASE="${BASE_URL:-http://127.0.0.1:3000}"
+BASE="${HQ_BASE:-${BASE_URL:-http://127.0.0.1:30000}}"
 PASS=0; FAIL=0
 pass(){ echo "PASS  $1"; PASS=$((PASS+1)); }
 fail(){ echo "FAIL  $1 — $2"; FAIL=$((FAIL+1)); }

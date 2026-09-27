@@ -27,7 +27,7 @@
 3. [x] **1차 DoD** — `npm run test:hq` PASS 10/10 (상세: `docs/IMPLEMENTATION-STATUS.md`)
 
 ### 1차 진입점
-- URL: http://127.0.0.1:3000/hq/login.html
+- URL: http://127.0.0.1:30000/hq/login.html
 - 계정: `admin` / `admin123` (시드: `tech_a`/`tech123`, `tech_b` 휴직)
 - 서버: `src/hq-server.fl` (`npm start`)
 - 스키마: `db/hq-schema.v1.json` (`bash scripts/provision-hq.sh`)

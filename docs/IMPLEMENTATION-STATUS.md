@@ -1,5 +1,7 @@
 # bigwash-hq 구현 상태
 
+**1차 잠금.** 기본 포트 HQ `30000`–`30099`, 현장 `30100`–`30199`. `3000`은 쓰지 않는다. 이후 기능 금지. 기록: [`LOCK-V1.md`](LOCK-V1.md)
+
 정본: [`HQ-BUILDER-SPEC.md`](HQ-BUILDER-SPEC.md)  
 저장소: https://github.com/kimjindol2025/bigwash-hq · `main`
 

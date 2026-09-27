@@ -2,7 +2,7 @@
 # Phase 2 API smoke against a running AFJ server.
 set -euo pipefail
 
-BASE="${BASE_URL:-http://127.0.0.1:3000}"
+BASE="${HQ_BASE:-${BASE_URL:-http://127.0.0.1:30000}}"
 PASS=0
 FAIL=0
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 돈 모듈 손테스트 1–8 + 패치 확인 (부분수금 모달 표식, 용병 일정)
 set -euo pipefail
-BASE="${BASE_URL:-http://127.0.0.1:3000}"
+BASE="${HQ_BASE:-${BASE_URL:-http://127.0.0.1:30000}}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PASS=0; FAIL=0
 pass(){ echo "PASS  $1"; PASS=$((PASS+1)); }

@@ -27,10 +27,10 @@ else
   echo "  WARN: afl-db health check failed — continue anyway"
 fi
 
-if curl -fsS -m 2 "http://127.0.0.1:${PORT:-3000}/health" >/dev/null; then
+if curl -fsS -m 2 "http://127.0.0.1:${HQ_PORT:-30000}/health" >/dev/null; then
   bash tests/phase2-smoke.sh
 else
-  echo "  server not up on :${PORT:-3000} — start with: npm start"
+  echo "  server not up on :${HQ_PORT:-30000} — start with: npm start"
   echo "  then: npm run test:phase2"
 fi
 
