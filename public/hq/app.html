@@ -864,10 +864,16 @@
       ? '<table><thead><tr><th>이름</th><th>위치</th></tr></thead><tbody>' +
         hub.equipment.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note) + '</td></tr>').join('') + '</tbody></table>'
       : '<div class="muted">장비 없음</div>';
+    const productsForName = await api('/hq/products').catch(() => []);
+    const pname = (pid) => {
+      const hit = productsForName.find((x) => x.product_id === pid);
+      return hit ? hit.name : pid;
+    };
     document.getElementById('fPur').innerHTML = purchases.length
-      ? '<table><thead><tr><th>상품</th><th>유형</th><th>확정일</th></tr></thead><tbody>' +
-        purchases.map((p) => '<tr><td class="mono">' + esc(p.product_id) + '</td><td>' + esc(p.fulfill_type) +
-          '</td><td>' + esc(p.confirm_date) + '</td></tr>').join('') + '</tbody></table>'
+      ? '<table><thead><tr><th>상품</th><th>유형</th><th>확정일</th><th>장비</th></tr></thead><tbody>' +
+        purchases.map((p) => '<tr><td>' + esc(pname(p.product_id)) + '</td><td>' + esc(p.fulfill_type) +
+          '</td><td>' + esc(p.confirm_date) + '</td><td class="mono">' + esc(p.equipment_id || '-') + '</td></tr>').join('') +
+        '</tbody></table>'
       : '<div class="muted">구매확정 없음</div>';
 
     const collect = () => ({
@@ -1029,35 +1035,150 @@
     });
   }
 
-  // ----- Mall / Regions / Settle / Reports / Followup / Settings -----
+  // ----- Schedule (직원 선선택) / Mall / Regions / Settle / Reports / Followup / Settings -----
+  async function renderSchedule() {
+    await Promise.all([loadStaff(), loadRegions()]);
+    const contractors = await api('/hq/contractors').catch(() => []);
+    const el = document.getElementById('p-schedule');
+    el.innerHTML = `
+      <div class="card">
+        <h3>스케줄 — 사람 먼저 선택 → 일정 부여</h3>
+        <div class="row">
+          <div class="grow"><label>정규 직원</label>
+            <select id="schStaff"><option value="">선택</option>${staff.map((u) =>
+              '<option value="' + esc(u.user_id) + '">' + esc(u.name) + '</option>').join('')}</select></div>
+          <div class="grow"><label>또는 용병 (이름만)</label>
+            <input id="schCtr" list="schCtrList" placeholder="용병 이름" />
+            <datalist id="schCtrList">${contractors.map((c) => '<option value="' + esc(c.name) + '"></option>').join('')}</datalist></div>
+          <div><label>날짜</label><input id="schDate" type="date" value="${new Date().toISOString().slice(0,10)}" /></div>
+          <button class="btn btn-primary" type="button" id="schLoad">조회</button>
+        </div>
+        <div class="actions" style="margin-top:8px">
+          <button class="btn btn-sm" type="button" id="schAddCtr">용병 이름 등록</button>
+        </div>
+      </div>
+      <div class="card"><h3>선택 인원 일정</h3><div id="schList"></div></div>
+      <div class="card"><h3>미일정 티켓 → 이 사람에게 부여 (1..N은 티켓 서랍에서 동행 추가)</h3><div id="schPool"></div></div>`;
+    document.getElementById('schLoad').onclick = loadSch;
+    document.getElementById('schAddCtr').onclick = () => {
+      showModal('<h3>용병 등록 (계정 없음)</h3><label>이름</label><input id="cn" />' +
+        '<label style="margin-top:8px">전화</label><input id="cp" />' +
+        '<div class="actions"><button class="btn" type="button" id="cx">취소</button>' +
+        '<button class="btn btn-primary" type="button" id="cs">저장</button></div>');
+      document.getElementById('cx').onclick = closeModal;
+      document.getElementById('cs').onclick = async () => {
+        await api('/hq/contractors', { method: 'POST', body: JSON.stringify({
+          name: document.getElementById('cn').value.trim(),
+          phone: document.getElementById('cp').value.trim()
+        })});
+        toast('용병 등록'); closeModal(); renderSchedule();
+      };
+    };
+    await loadSch();
+  }
+
+  async function loadSch() {
+    const sid = document.getElementById('schStaff').value;
+    const cname = document.getElementById('schCtr').value.trim();
+    const day = document.getElementById('schDate').value;
+    if (!sid && !cname) {
+      document.getElementById('schList').innerHTML = '<div class="empty">직원 또는 용병을 먼저 선택</div>';
+      document.getElementById('schPool').innerHTML = '';
+      return;
+    }
+    const data = await api('/hq/schedule?date=' + encodeURIComponent(day));
+    let mine = data.tickets || [];
+    if (sid) mine = mine.filter((t) => t.assignee_id === sid);
+    // contractor schedules aren't in ticket.assignee_id — show note
+    const conflicts = (data.conflicts || []).filter((c) => !sid || c.assignee_id === sid);
+    let html = '';
+    if (cname && !sid) html += '<div class="muted">용병은 주담당 필드가 아니라 배정 테이블에 붙습니다. 부여 시 티켓 서랍/배정 API로 기록됩니다.</div>';
+    if (conflicts.length) html += '<div class="empty" style="color:#ff8a95">충돌 경고 ' + conflicts.length + '건 (저장은 됨)</div>';
+    html += mine.length
+      ? '<table><thead><tr><th>시각</th><th>번호</th><th>상태</th><th></th></tr></thead><tbody>' +
+        mine.map((t) => '<tr><td class="mono">' + esc(t.scheduled_at) + '</td><td class="mono">' + esc(t.number) +
+          '</td><td>' + badge(t.status) + '</td><td><button class="btn btn-sm" type="button" data-open="' +
+          esc(t.ticket_id) + '">서랍</button></td></tr>').join('') + '</tbody></table>'
+      : '<div class="empty">이 날짜 일정 없음</div>';
+    document.getElementById('schList').innerHTML = html;
+    document.querySelectorAll('#schList [data-open]').forEach((b) => b.onclick = () => openTicket(b.dataset.open));
+
+    const all = await api('/hq/tickets');
+    const pool = all.filter((t) => t.status !== 'closed' && t.status !== 'cancelled' && !t.scheduled_at);
+    document.getElementById('schPool').innerHTML = pool.length
+      ? '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
+        pool.slice(0, 40).map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) +
+          '</td><td>' + esc(t.symptom) + '</td><td><button class="btn btn-sm btn-primary" type="button" data-give="' +
+          esc(t.ticket_id) + '">부여</button></td></tr>').join('') + '</tbody></table>'
+      : '<div class="empty">미일정 티켓 없음</div>';
+    document.querySelectorAll('[data-give]').forEach((b) => b.onclick = async () => {
+      const when = day + 'T10:00';
+      const dt = window.prompt('방문일시 (YYYY-MM-DDTHH:mm)', when);
+      if (!dt) return;
+      try {
+        const assignees = [];
+        if (sid) assignees.push({ kind: 'staff', user_id: sid, is_primary: 'true' });
+        if (cname) assignees.push({ kind: 'contractor', contractor_name: cname, day_pay_amount: 150000, is_primary: sid ? 'false' : 'true' });
+        if (!assignees.length) return toast('대상 선택', true);
+        // if only contractor, still need a staff primary for "배정됨" rules — force pick staff
+        if (!sid && cname) return toast('주담당 정규 직원을 함께 선택하세요 (용병만 주담당 불가)', true);
+        await api('/hq/tickets/' + b.dataset.give + '/assignees', { method: 'POST', body: JSON.stringify({ assignees }) });
+        const r = await api('/hq/tickets/' + b.dataset.give + '/schedule', {
+          method: 'POST', body: JSON.stringify({ scheduled_at: new Date(dt).toISOString() })
+        });
+        toast(r.conflict_warning ? '부여됨 (충돌 경고)' : '부여됨');
+        loadSch();
+      } catch (e) { toast(e.message, true); }
+    });
+  }
+
   async function renderMall() {
     const rows = await api('/hq/products');
     const el = document.getElementById('p-mall');
-    el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between"><h3>사내몰</h3>
+    const fulfillOf = (p) => {
+      const m = String(p.description || '').match(/fulfill_type=([a-z]+)/);
+      return (p.fulfill_type || (m && m[1]) || 'part');
+    };
+    el.innerHTML = `<div class="card"><div class="actions" style="justify-content:space-between"><h3>사내몰 상품</h3>
       <button class="btn btn-primary" type="button" id="pAdd">＋ 상품</button></div><div id="pList"></div></div>`;
     document.getElementById('pList').innerHTML = rows.length
-      ? '<table><thead><tr><th>이름</th><th>카테고리</th><th>판매가</th><th>원가</th><th>SKU</th></tr></thead><tbody>' +
-        rows.map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.category) + '</td><td class="mono">' + esc(p.sale_price) +
-          '</td><td class="mono">' + esc(p.cost_price) + '</td><td class="mono">' + esc(p.sku) + '</td></tr>').join('') + '</tbody></table>'
+      ? '<table><thead><tr><th>이름</th><th>카테고리</th><th>유형</th><th>판매가</th><th>원가</th><th>SKU</th><th>상태</th></tr></thead><tbody>' +
+        rows.map((p) => '<tr><td>' + esc(p.name) + '</td><td>' + esc(p.category) + '</td><td>' + esc(fulfillOf(p)) +
+          '</td><td class="mono">' + esc(p.sale_price) + '</td><td class="mono">' + esc(p.cost_price) +
+          '</td><td class="mono">' + esc(p.sku) + '</td><td>' + esc(p.status) + '</td></tr>').join('') + '</tbody></table>'
       : '<div class="empty">상품 없음</div>';
     document.getElementById('pAdd').onclick = () => {
       showModal(`<h3>상품 등록</h3>
-        <label>이름</label><input id="pn" />
+        <label>이름 *</label><input id="pn" />
         <label style="margin-top:8px">카테고리</label><input id="pc" value="부품" />
-        <label style="margin-top:8px">판매단가</label><input id="pp" type="number" value="10000" />
-        <label style="margin-top:8px">원가</label><input id="pco" type="number" value="0" />
-        <label style="margin-top:8px">SKU</label><input id="ps" />
+        <label style="margin-top:8px">fulfill_type</label>
+        <select id="pf"><option value="part">part</option><option value="ship">ship</option><option value="install">install</option></select>
+        <label style="margin-top:8px">규격</label><input id="psp" />
+        <label style="margin-top:8px">품번(SKU)</label><input id="ps" />
+        <label style="margin-top:8px">판매단가 *</label><input id="pp" type="number" value="10000" />
+        <label style="margin-top:8px">원가(경리)</label><input id="pco" type="number" value="0" />
+        <label style="margin-top:8px">단위</label><input id="pu" value="EA" />
+        <label style="margin-top:8px">상태</label>
+        <select id="pst"><option value="active">판매중</option><option value="hidden">숨김</option></select>
+        <label style="margin-top:8px">설명</label><input id="pd" />
         <div class="actions"><button class="btn" type="button" id="pcancel">취소</button>
         <button class="btn btn-primary" type="button" id="psave">저장</button></div>`);
       document.getElementById('pcancel').onclick = closeModal;
       document.getElementById('psave').onclick = async () => {
         try {
+          const name = document.getElementById('pn').value.trim();
+          if (!name) return toast('이름 필수', true);
           await api('/hq/products', { method: 'POST', body: JSON.stringify({
-            name: document.getElementById('pn').value.trim(),
+            name,
             category: document.getElementById('pc').value.trim(),
+            fulfill_type: document.getElementById('pf').value,
+            spec: document.getElementById('psp').value.trim(),
+            sku: document.getElementById('ps').value.trim(),
             sale_price: Number(document.getElementById('pp').value || 0),
             cost_price: Number(document.getElementById('pco').value || 0),
-            sku: document.getElementById('ps').value.trim()
+            unit: document.getElementById('pu').value.trim(),
+            status: document.getElementById('pst').value,
+            description: document.getElementById('pd').value.trim()
           })});
           toast('상품 저장'); closeModal(); renderMall();
         } catch (e) { toast(e.message, true); }
