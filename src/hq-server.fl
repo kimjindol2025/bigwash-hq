@@ -599,8 +599,10 @@
             $slot (?? (get $body "slot") 0)
             $raw (?? (get $body "image_base64") "")
             $t (db-row (db-get-row "hq_tickets" $tid))]
-        (if (or (nil? $t) (and (not (= $side "before")) (not (= $side "after"))) (< $slot 1) (> $slot 5) (= $raw ""))
-          (json-err 400 "side, slot 1-5, image_base64 required")
+        (if (or (nil? $t)
+                (and (not (= $side "before")) (not (= $side "after")) (not (= $side "log")))
+                (< $slot 1) (> $slot 5) (= $raw ""))
+          (json-err 400 "side before|after|log, slot 1-5, image_base64 required")
           (do
             (ensure-upload!)
             (let [$pid (new-id "pho")

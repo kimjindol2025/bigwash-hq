@@ -595,97 +595,187 @@
     }
   }
 
+
   async function openTicket(id) {
     await Promise.all([loadStaff(), loadRegions()]);
     const data = await api('/hq/tickets/' + encodeURIComponent(id));
     const fin = await api('/hq/tickets/' + encodeURIComponent(id) + '/finance');
     const contractors = await api('/hq/contractors').catch(() => []);
+    const products = await api('/hq/products').catch(() => []);
     currentTicket = data.ticket;
     const t = data.ticket;
     const next = NEXT[t.status] || [];
     const settleOpts = ['카드완납','계좌완납','현금완납','부분수금','미수','해당없음'];
-    openDrawer(
-      '<div class="actions" style="justify-content:space-between"><h3>' + esc(t.number) + '</h3>' +
-      '<button class="btn btn-sm" type="button" id="dClose">닫기</button></div>' +
-      '<div>' + badge(t.status) +
-      ' <span class="badge" id="dSettleBadge">' + esc(fin.settlement_status || '정산없음') + '</span>' +
-      (t.is_repeat === 'true' ? ' <span class="badge">재고장</span>' : '') +
-      (t.photo_incomplete === 'true' ? ' <span class="badge">사진미비</span>' : '') + '</div>' +
-      '<p style="margin:10px 0">' + esc(t.symptom) + '</p>' +
-      '<div class="muted">고객 ' + esc(t.customer_id) + ' · 장비 ' + esc(t.equipment_id) + '</div>' +
-      '<div class="muted">권역출장비 ' + esc(fin.travel_fee) + '원</div>' +
-      '<hr style="border-color:var(--line);margin:12px 0">' +
-      '<h4>배정 (정규 1..N + 용병)</h4>' +
-      '<label>정규 직원</label><select id="dAddStaff" multiple style="min-height:72px">' +
-      staff.map((u) => '<option value="' + esc(u.user_id) + '">' + esc(u.name) + '</option>').join('') + '</select>' +
-      '<div class="row" style="margin-top:8px"><div class="grow"><label>용병 이름 (계정 없음)</label>' +
-      '<input id="dContractor" list="ctrList" placeholder="용병 이름만" />' +
-      '<datalist id="ctrList">' + contractors.map((c) => '<option value="' + esc(c.name) + '"></option>').join('') + '</datalist></div>' +
-      '<div class="grow"><label>용병 일당</label><input id="dDayPay" type="number" value="150000" /></div></div>' +
-      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dAsgSave">배정 저장</button></div>' +
-      '<div id="dAsgList" class="mono" style="font-size:12px;margin-top:8px"></div>' +
-      '<h4 style="margin-top:12px">일정</h4>' +
-      '<input id="dSched" type="datetime-local" />' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dSchedBtn">일정 저장</button></div>' +
-      '<h4 style="margin-top:12px">권역</h4>' +
-      '<select id="dRegion">' + regionOptions(fin.region_id) + '</select>' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dFin">권역·출장비 적용</button></div>' +
-      '<h4 style="margin-top:12px">장바구니 (출장 전용)</h4>' +
-      '<div class="muted" style="font-size:12px;margin-bottom:6px">사내몰 상품 → 이 티켓에 담기. 출장비는 권역 1줄 자동.</div>' +
-      '<div class="actions">' +
-      '<button class="btn btn-sm btn-primary" type="button" id="dCartMall">몰에서 담기</button>' +
-      '<button class="btn btn-sm" type="button" id="dCartPart">수기 부품</button>' +
-      '<button class="btn btn-sm" type="button" id="dCartLabor">공임</button>' +
-      '<button class="btn btn-sm" type="button" id="dCartTravel">출장비 동기화</button></div>' +
-      '<div id="dCart" class="mono" style="font-size:12px;margin-top:8px"></div>' +
-      '<h4 style="margin-top:12px">상태 전이</h4><div class="actions" id="dNext"></div>' +
-      '<h4 style="margin-top:12px">정산 뱃지 (본사 수정)</h4><div class="actions" id="dSettle"></div>' +
-      '<h4 style="margin-top:12px">명세</h4>' +
-      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dDoc">PDF·PNG 발행</button></div>' +
-      '<h4 style="margin-top:12px">일지 / 사진</h4>' +
-      '<div class="muted" id="dLog">' + esc(fin.work_log || '일지 없음(수신 대기)') + '</div>' +
-      '<div id="dPhotos" class="muted">사진 슬롯 조회…</div>' +
-      '<h4 style="margin-top:12px">타임라인</h4>' +
-      '<div class="mono" style="font-size:12px">' + (data.events || []).map((e) =>
-        '<div>' + esc(e.at) + ' · ' + esc(e.type) + ' ' + esc(e.from_status) + '→' + esc(e.to_status) + ' ' + esc(e.memo) + '</div>'
-      ).join('') + '</div>'
-    );
+
+    let cust = {};
+    let extra = {};
+    try { cust = await api('/hq/customers/' + encodeURIComponent(t.customer_id)); } catch (_) {}
+    try { extra = await api('/hq/customers/' + encodeURIComponent(t.customer_id) + '/extra'); } catch (_) {}
+    let eq = {};
+    try {
+      const eqs = await api('/hq/equipment?customer_id=' + encodeURIComponent(t.customer_id));
+      eq = (eqs || []).find((e) => e.equipment_id === t.equipment_id) || {};
+    } catch (_) {}
+    const regionName = (regions.find((r) => r.region_id === (fin.region_id || extra.region_id)) || {}).name || (fin.region_id || '-');
+
+    openDrawer(`
+      <div class="actions" style="justify-content:space-between;align-items:center">
+        <div><h3 style="margin:0">${esc(t.number)}</h3>
+          <div style="margin-top:6px">${badge(t.status)}
+            <span class="badge" id="dSettleBadge">${esc(fin.settlement_status || '정산없음')}</span>
+            ${t.is_repeat === 'true' ? '<span class="badge">재고장</span>' : ''}
+          </div>
+        </div>
+        <button class="btn btn-sm" type="button" id="dClose">닫기</button>
+      </div>
+
+      <div class="card" style="margin-top:12px;padding:12px">
+        <h4 style="margin:0 0 8px">고객 / 요청</h4>
+        <div><b>${esc(cust.display_name || t.customer_id)}</b></div>
+        <div class="mono">${esc(cust.primary_phone || t.intake_phone || '-')}</div>
+        <div class="muted">${esc(cust.address || '-')}</div>
+        <div class="muted">권역: ${esc(regionName)} · 출장비 ${esc(fin.travel_fee || 0)}원</div>
+        <div class="muted">장비: ${esc(eq.name || t.equipment_id)} ${eq.location_note ? '(' + esc(eq.location_note) + ')' : ''}</div>
+        <div style="margin-top:8px"><b>수리 요청</b><div>${esc(t.symptom)}</div></div>
+        ${t.intake_memo ? '<div class="muted" style="margin-top:6px">접수메모: ' + esc(t.intake_memo) + '</div>' : ''}
+      </div>
+
+      <div class="card" style="padding:12px">
+        <h4 style="margin:0 0 8px">1. 배정</h4>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">등록 직원 N명 선택 + 용병은 이름·일당만 수기. 계정 생성 없음.</div>
+        <label>직원 (복수 선택)</label>
+        <select id="dAddStaff" multiple style="min-height:88px">${staff.map((u) =>
+          '<option value="' + esc(u.user_id) + '">' + esc(u.name) + ' · ' + esc(u.role) + '</option>'
+        ).join('')}</select>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>용병 이름</label><input id="dContractor" list="ctrList" placeholder="수기 입력" />
+            <datalist id="ctrList">${contractors.map((c) => '<option value="' + esc(c.name) + '"></option>').join('')}</datalist></div>
+          <div class="grow"><label>용병 일당</label><input id="dDayPay" type="number" value="150000" /></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>방문 일시</label><input id="dSched" type="datetime-local" /></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary btn-sm" type="button" id="dAsgSave">배정 저장</button>
+          <button class="btn btn-sm" type="button" id="dSchedBtn">일정만 저장</button>
+        </div>
+        <div id="dAsgList" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card" style="padding:12px">
+        <h4 style="margin:0 0 8px">2. 현장 장바구니 = 견적/명세</h4>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">자사몰 부품을 골라 고객에게 금액을 안내합니다. 출장비는 권역 1줄.</div>
+        <label>권역</label>
+        <select id="dRegion">${regionOptions(fin.region_id || extra.region_id || '')}</select>
+        <div class="actions">
+          <button class="btn btn-sm" type="button" id="dFin">권역 적용</button>
+          <button class="btn btn-sm btn-primary" type="button" id="dCartMall">몰 부품 담기</button>
+          <button class="btn btn-sm" type="button" id="dCartLabor">공임</button>
+          <button class="btn btn-sm" type="button" id="dCartTravel">출장비 동기화</button>
+        </div>
+        <div id="dCart" style="margin-top:10px"></div>
+        <div class="actions">
+          <button class="btn btn-primary btn-sm" type="button" id="dDoc">견적/명세 PDF·PNG</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:12px">
+        <h4 style="margin:0 0 8px">3. 일지 · 사진</h4>
+        <label>출장 일지</label>
+        <textarea id="dWorkLog" rows="4">${esc(fin.work_log || '')}</textarea>
+        <label style="margin-top:8px">일지 파일 (이미지/PDF)</label>
+        <input id="dLogFile" type="file" accept="image/*,application/pdf" />
+        <div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dLogSave">일지 저장</button></div>
+        <div class="row" style="margin-top:10px">
+          <div class="grow"><label>현장 사진 (전/후)</label>
+            <select id="dPhotoSide"><option value="before">전</option><option value="after">후</option></select></div>
+          <div class="grow"><label>슬롯 1–5</label>
+            <select id="dPhotoSlot">${[1,2,3,4,5].map((n) => '<option value="' + n + '">' + n + '</option>').join('')}</select></div>
+        </div>
+        <input id="dPhotoFile" type="file" accept="image/*" />
+        <div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dPhotoUp">사진 업로드</button></div>
+        <div id="dPhotos" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="padding:12px">
+        <h4 style="margin:0 0 8px">4. 상태 · 정산</h4>
+        <div class="actions" id="dNext"></div>
+        <div class="actions" id="dSettle" style="margin-top:8px"></div>
+        <h4 style="margin-top:12px">타임라인</h4>
+        <div class="mono" style="font-size:12px">${(data.events || []).map((e) =>
+          '<div>' + esc(e.at) + ' · ' + esc(e.type) + ' ' + esc(e.from_status) + '→' + esc(e.to_status) + ' ' + esc(e.memo || '') + '</div>'
+        ).join('')}</div>
+      </div>
+    `);
+
     document.getElementById('dClose').onclick = closeDrawer;
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
 
     async function refreshAsgCart() {
       const asg = await api('/hq/tickets/' + id + '/assignees');
-      document.getElementById('dAsgList').innerHTML = (asg || []).map((a) =>
-        '<div>' + esc(a.kind) + ' ' + esc(a.user_id || a.contractor_name) +
-        (a.is_primary === 'true' ? ' [주]' : '') +
-        (a.day_pay_amount ? (' 일당 ' + a.day_pay_amount) : '') + '</div>'
-      ).join('') || '<div class="muted">배정 없음</div>';
+      document.getElementById('dAsgList').innerHTML = (asg || []).length
+        ? '<table><thead><tr><th>구분</th><th>이름/ID</th><th>주</th><th>일당</th></tr></thead><tbody>' +
+          asg.map((a) => '<tr><td>' + esc(a.kind === 'contractor' ? '용병' : '직원') + '</td><td>' +
+            esc(a.contractor_name || a.user_id) + '</td><td>' + (a.is_primary === 'true' ? '주담당' : '') +
+            '</td><td>' + esc(a.day_pay_amount || '-') + '</td></tr>').join('') + '</tbody></table>'
+        : '<div class="muted">배정 내역 없음</div>';
+
+      // preselect staff already assigned
+      const sel = document.getElementById('dAddStaff');
+      const assignedIds = new Set((asg || []).filter((a) => a.kind === 'staff').map((a) => a.user_id));
+      [...sel.options].forEach((o) => { o.selected = assignedIds.has(o.value); });
+
       const cart = await api('/hq/tickets/' + id + '/cart');
       const sum = (cart || []).reduce((s, l) => s + (Number(l.qty || 1) * Number(l.price || 0)), 0);
-      document.getElementById('dCart').innerHTML = (cart || []).map((l) =>
-        '<div>' + esc(l.kind) + ' ' + esc(l.name) + ' ×' + esc(l.qty) + ' @' + esc(l.price) + '</div>'
-      ).join('') + '<div><b>합계 ' + sum + '</b></div>';
+      document.getElementById('dCart').innerHTML = (cart || []).length
+        ? '<table><thead><tr><th>구분</th><th>항목</th><th>수량</th><th>단가</th><th>금액</th></tr></thead><tbody>' +
+          cart.map((l) => {
+            const amt = Number(l.qty || 1) * Number(l.price || 0);
+            const kindLabel = l.kind === 'travel' ? '출장비' : (l.kind === 'labor' ? '공임' : '부품');
+            return '<tr><td>' + kindLabel + '</td><td>' + esc(l.name) + '</td><td>' + esc(l.qty) +
+              '</td><td>' + esc(l.price) + '</td><td>' + amt + '</td></tr>';
+          }).join('') + '</tbody></table><div style="margin-top:6px"><b>합계 ' + sum + '원</b> (고객 안내 금액)</div>'
+        : '<div class="muted">장바구니 비어 있음 — 몰 부품을 담으세요</div>';
     }
+
+    async function refreshPhotos() {
+      const det = await api('/hq/tickets/' + id);
+      const photos = det.photos || [];
+      document.getElementById('dPhotos').innerHTML = photos.length
+        ? photos.map((p) => '<div class="badge" style="margin:2px">' + esc(p.side) + ' #' + esc(p.slot) + '</div>').join(' ')
+        : '<span class="muted">사진 없음</span>';
+    }
+
     await refreshAsgCart();
-    const photos = data.photos || [];
-    document.getElementById('dPhotos').innerHTML = photos.length
-      ? photos.map((p) => '<div>' + esc(p.side) + ' #' + esc(p.slot) + '</div>').join('')
-      : '사진 없음(수신 대기)';
+    await refreshPhotos();
 
     document.getElementById('dAsgSave').onclick = async () => {
       const sel = [...document.getElementById('dAddStaff').selectedOptions].map((o) => o.value).filter(Boolean);
       const cname = document.getElementById('dContractor').value.trim();
       const pay = Number(document.getElementById('dDayPay').value || 0);
+      if (!sel.length) return toast('직원 1명 이상 선택 (주담당)', true);
       const assignees = sel.map((uid, i) => ({ kind: 'staff', user_id: uid, is_primary: i === 0 ? 'true' : 'false' }));
       if (cname) assignees.push({ kind: 'contractor', contractor_name: cname, day_pay_amount: pay, is_primary: 'false' });
-      if (!assignees.length) return toast('정규 또는 용병 필요', true);
-      if (!assignees.some((a) => a.kind === 'staff' && a.is_primary === 'true') && assignees.some((a) => a.kind === 'staff')) {
-        assignees[0].is_primary = 'true';
-      }
       try {
         await api('/hq/tickets/' + id + '/assignees', { method: 'POST', body: JSON.stringify({ assignees }) });
-        toast('배정 저장'); openTicket(id);
+        const v = document.getElementById('dSched').value;
+        if (v) {
+          const r = await api('/hq/tickets/' + id + '/schedule', { method: 'POST', body: JSON.stringify({ scheduled_at: new Date(v).toISOString() }) });
+          if (r.conflict_warning) toast('배정 저장 (일정 충돌 경고)');
+          else toast('배정·일정 저장');
+        } else toast('배정 저장');
+        openTicket(id);
       } catch (e) { toast(e.message, true); }
     };
+
     document.getElementById('dSchedBtn').onclick = async () => {
       const v = document.getElementById('dSched').value;
       if (!v) return toast('일시 선택', true);
@@ -694,103 +784,65 @@
         toast(r.conflict_warning ? '일정 저장 (충돌 경고)' : '일정 저장');
       } catch (e) { toast(e.message, true); }
     };
+
     document.getElementById('dFin').onclick = async () => {
       try {
         const r = await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ region_id: document.getElementById('dRegion').value }) });
         await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
-        toast('출장비 ' + r.travel_fee + '원'); openTicket(id);
+        toast('권역 출장비 ' + r.travel_fee + '원'); openTicket(id);
       } catch (e) { toast(e.message, true); }
     };
+
     document.getElementById('dCartMall').onclick = async () => {
-      const products = await api('/hq/products');
       const sellable = (products || []).filter((p) => p.status !== 'hidden');
-      if (!sellable.length) return toast('사내몰에 판매중 상품이 없습니다', true);
-      showModal('<h3>사내몰에서 담기</h3>' +
-        '<label>상품</label><select id="cmSel">' +
+      if (!sellable.length) return toast('사내몰 상품 없음 — 사내몰에서 등록', true);
+      showModal('<h3>몰 부품 → 장바구니 (견적)</h3><label>상품</label><select id="cmSel">' +
         sellable.map((p) => '<option value="' + esc(p.product_id) + '" data-price="' + esc(p.sale_price) + '" data-name="' + esc(p.name) + '">' +
           esc(p.name) + ' · ' + esc(p.sale_price) + '원</option>').join('') +
-        '</select>' +
-        '<label style="margin-top:8px">수량</label><input id="cmQty" type="number" value="1" min="1" />' +
+        '</select><label style="margin-top:8px">수량</label><input id="cmQty" type="number" value="1" min="1" />' +
         '<div class="actions"><button class="btn" type="button" id="cmx">취소</button>' +
-        '<button class="btn btn-primary" type="button" id="cms">장바구니에 담기</button></div>');
+        '<button class="btn btn-primary" type="button" id="cms">담기</button></div>');
       document.getElementById('cmx').onclick = closeModal;
       document.getElementById('cms').onclick = async () => {
         const sel = document.getElementById('cmSel');
         const opt = sel.options[sel.selectedIndex];
         await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
-          kind: 'part',
-          product_id: sel.value,
-          name: opt.getAttribute('data-name') || opt.textContent,
-          qty: Number(document.getElementById('cmQty').value || 1),
+          kind: 'part', product_id: sel.value,
+          name: opt.getAttribute('data-name'), qty: Number(document.getElementById('cmQty').value || 1),
           price: Number(opt.getAttribute('data-price') || 0)
         })});
         await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
         toast('장바구니에 담김'); closeModal(); refreshAsgCart();
       };
     };
-    document.getElementById('dCartPart').onclick = () => {
-      showModal('<h3>수기 부품</h3><label>이름</label><input id="cpn" value="부품" />' +
-        '<label style="margin-top:8px">수량</label><input id="cpq" type="number" value="1" />' +
-        '<label style="margin-top:8px">단가</label><input id="cpp" type="number" value="10000" />' +
-        '<div class="actions"><button class="btn" type="button" id="cpx">취소</button>' +
-        '<button class="btn btn-primary" type="button" id="cps">추가</button></div>');
-      document.getElementById('cpx').onclick = closeModal;
-      document.getElementById('cps').onclick = async () => {
-        await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
-          kind: 'part', name: document.getElementById('cpn').value,
-          qty: Number(document.getElementById('cpq').value || 1),
-          price: Number(document.getElementById('cpp').value || 0)
-        })});
-        toast('부품 추가'); closeModal(); refreshAsgCart();
-      };
-    };
-    document.getElementById('dCartLabor').onclick = async () => {
-      showModal('<h3>공임</h3><label>난이도/이름</label>' +
-        '<select id="cln"><option value="공임-하">공임-하</option><option value="공임-중">공임-중</option><option value="공임-상">공임-상</option></select>' +
+
+    document.getElementById('dCartLabor').onclick = () => {
+      showModal('<h3>공임</h3><label>항목</label><select id="cln"><option>공임-하</option><option>공임-중</option><option>공임-상</option></select>' +
         '<label style="margin-top:8px">금액</label><input id="clp" type="number" value="50000" />' +
-        '<div class="actions"><button class="btn" type="button" id="clx">취소</button>' +
-        '<button class="btn btn-primary" type="button" id="cls">추가</button></div>');
+        '<div class="actions"><button class="btn" type="button" id="clx">취소</button><button class="btn btn-primary" type="button" id="cls">추가</button></div>');
       document.getElementById('clx').onclick = closeModal;
       document.getElementById('cls').onclick = async () => {
         await api('/hq/tickets/' + id + '/cart', { method: 'POST', body: JSON.stringify({
-          kind: 'labor', name: document.getElementById('cln').value,
-          qty: 1, price: Number(document.getElementById('clp').value || 0)
+          kind: 'labor', name: document.getElementById('cln').value, qty: 1,
+          price: Number(document.getElementById('clp').value || 0)
         })});
         toast('공임 추가'); closeModal(); refreshAsgCart();
       };
     };
+
     document.getElementById('dCartTravel').onclick = async () => {
       await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
       toast('출장비 동기화'); refreshAsgCart();
     };
-    const nb = document.getElementById('dNext');
-    nb.innerHTML = next.map((s) => '<button class="btn btn-sm" type="button" data-to="' + s + '">' + (STATUS[s] || s) + '</button>').join('') || '<span class="muted">전이 없음</span>';
-    nb.querySelectorAll('button[data-to]').forEach((b) => b.onclick = async () => {
-      const to = b.dataset.to;
-      let cancel_reason = '';
-      if (to === 'cancelled') {
-        cancel_reason = window.prompt('취소 사유') || '';
-        if (!cancel_reason) return toast('취소 사유 필수', true);
-      }
-      try {
-        await api('/hq/tickets/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to, cancel_reason }) });
-        toast('상태 → ' + (STATUS[to] || to)); openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    });
-    document.getElementById('dSettle').innerHTML = settleOpts.map((s) =>
-      '<button class="btn btn-sm" type="button" data-st="' + s + '">' + s + '</button>'
-    ).join('');
-    document.getElementById('dSettle').querySelectorAll('button').forEach((b) => b.onclick = async () => {
-      await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ settlement_status: b.dataset.st }) });
-      toast(b.dataset.st); openTicket(id);
-    });
+
     document.getElementById('dDoc').onclick = async () => {
       try {
         const cart = await api('/hq/tickets/' + id + '/cart');
         const lines = (cart || []).filter((l) => l.kind === 'part').map((l) => ({ name: l.name, qty: l.qty, price: l.price }));
+        const labor = (cart || []).filter((l) => l.kind === 'labor').reduce((s, l) => s + Number(l.price || 0), 0);
         const doc = await api('/hq/documents', {
           method: 'POST',
-          body: JSON.stringify({ ticket_id: id, doc_type: 'invoice', labor_fee: 50000, bill_type: t.bill_type || 'paid', lines })
+          body: JSON.stringify({ ticket_id: id, doc_type: 'invoice', labor_fee: labor || 50000, bill_type: t.bill_type || 'paid', lines })
         });
         const dl = await api('/hq/documents/' + doc.doc_id + '/download?format=pdf');
         showModal('<h3>' + esc(dl.title) + '</h3><pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:10px 0">' +
@@ -808,7 +860,66 @@
         document.getElementById('mPng').href = URL.createObjectURL(b64ToBlob(dl.image_png_base64, 'image/png'));
       } catch (e) { toast(e.message, true); }
     };
+
+    document.getElementById('dLogSave').onclick = async () => {
+      try {
+        const work_log = document.getElementById('dWorkLog').value;
+        await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ work_log }) });
+        const f = document.getElementById('dLogFile').files[0];
+        if (f) {
+          const dataUrl = await fileToDataUrl(f);
+          await api('/hq/tickets/' + id + '/photos', {
+            method: 'POST',
+            body: JSON.stringify({ side: 'log', slot: 1, image_base64: dataUrl, mime: f.type || 'application/octet-stream', original_name: f.name })
+          });
+        }
+        toast('일지 저장'); openTicket(id);
+      } catch (e) { toast(e.message, true); }
+    };
+
+    document.getElementById('dPhotoUp').onclick = async () => {
+      const f = document.getElementById('dPhotoFile').files[0];
+      if (!f) return toast('사진 파일 선택', true);
+      try {
+        const dataUrl = await fileToDataUrl(f);
+        await api('/hq/tickets/' + id + '/photos', {
+          method: 'POST',
+          body: JSON.stringify({
+            side: document.getElementById('dPhotoSide').value,
+            slot: Number(document.getElementById('dPhotoSlot').value || 1),
+            image_base64: dataUrl,
+            mime: f.type || 'image/jpeg',
+            original_name: f.name
+          })
+        });
+        toast('사진 업로드'); refreshPhotos();
+      } catch (e) { toast(e.message, true); }
+    };
+
+    const nb = document.getElementById('dNext');
+    nb.innerHTML = next.map((s) => '<button class="btn btn-sm" type="button" data-to="' + s + '">' + (STATUS[s] || s) + '</button>').join('') || '<span class="muted">전이 없음</span>';
+    nb.querySelectorAll('button[data-to]').forEach((b) => b.onclick = async () => {
+      const to = b.dataset.to;
+      let cancel_reason = '';
+      if (to === 'cancelled') {
+        cancel_reason = window.prompt('취소 사유') || '';
+        if (!cancel_reason) return toast('취소 사유 필수', true);
+      }
+      try {
+        await api('/hq/tickets/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to, cancel_reason }) });
+        toast('상태 → ' + (STATUS[to] || to)); openTicket(id);
+      } catch (e) { toast(e.message, true); }
+    });
+
+    document.getElementById('dSettle').innerHTML = settleOpts.map((s) =>
+      '<button class="btn btn-sm" type="button" data-st="' + s + '">' + s + '</button>'
+    ).join('');
+    document.getElementById('dSettle').querySelectorAll('button').forEach((b) => b.onclick = async () => {
+      await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ settlement_status: b.dataset.st }) });
+      toast(b.dataset.st); openTicket(id);
+    });
   }
+
 
   async function renderCustomers() {
     const el = document.getElementById('p-customers');
