@@ -38,7 +38,7 @@
     input,select,textarea{width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--input);color:var(--text);font-size:13px}
     input::placeholder,textarea::placeholder{color:#9db0c9}
     textarea{min-height:70px;resize:vertical}
-    .btn{border:1px solid var(--line);background:transparent;color:var(--text);padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px}
+    .btn{border:1px solid #c5d4ea;background:transparent;color:#f3f7ff;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px}
     .btn:hover{border-color:#3a4b6a}
     .btn-primary{background:linear-gradient(135deg,#2bd4bd,#2a9df4);color:#041018;border:none;font-weight:700}
     .chips .btn-primary{background:rgba(61,224,199,.18);color:var(--accent);border:1px solid var(--accent)}
@@ -117,7 +117,11 @@
       .main{min-height:100vh}
       .top{position:sticky;top:0;z-index:40;height:56px;padding:0 10px;display:grid;grid-template-columns:44px 1fr auto;gap:8px;align-items:center;background:var(--panel)}
       #title{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .content{padding:10px 14px 28px}
+      .content{padding:10px 14px 64px}
+      .tabbar{display:grid;position:fixed;left:0;right:0;bottom:0;height:56px;z-index:45;grid-template-columns:repeat(3,1fr);background:var(--panel);border-top:1px solid var(--line)}
+      .tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;border:none;background:transparent;color:#f3f7ff;font-size:12px}
+      .tabbar button .ico{font-size:16px;line-height:1}
+      .tabbar button.on{background:rgba(61,224,199,.18);color:var(--accent)}
       .card{margin-bottom:10px}
       .alert-line{margin:0 0 10px;line-height:1.45;color:var(--text);font-size:14px}
       input,select,textarea,.btn{min-height:44px;font-size:16px}
@@ -129,7 +133,7 @@
       .chips .btn{flex:0 0 auto}
       .stack-actions{flex-direction:column}
       .stack-actions .btn{width:100%}
-      .sticky-actions,.desk-actions{position:sticky;bottom:0;z-index:6;background:var(--card);padding:8px 0 4px;margin-top:12px}
+      .sticky-actions,.desk-actions{position:sticky;bottom:56px;z-index:6;background:var(--card);padding:8px 0 4px;margin-top:12px}
       .desk-sticky{position:sticky;top:56px;z-index:8;background:var(--bg)}
       .stats{grid-template-columns:1fr 1fr}
       .content,.drawer{overflow-x:hidden}
@@ -138,9 +142,9 @@
       table.cards tbody{display:block}
       table.cards tr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;color:var(--text)}
       table.cards td{display:none;border:none;padding:0;color:var(--text)}
-      table.cards td[data-line="1"]{display:block;order:1;flex:1 1 auto;font-weight:700;font-size:15px;color:var(--text)}
+      table.cards td[data-line="1"]{display:block;order:1;flex:1 1 auto;font-weight:700;font-size:15px;color:#f3f7ff}
       table.cards td[data-line="b"]{display:inline-flex;order:2;margin:0}
-      table.cards td[data-line="2"]{display:block;order:3;flex:1 0 100%;color:var(--text);margin-top:2px;font-size:14px}
+      table.cards td[data-line="2"]{display:block;order:3;flex:1 0 100%;color:#f3f7ff;margin-top:2px;font-size:14px}
       table.cards td[data-line="3"]{display:inline;order:4;color:var(--muted);font-size:12px}
       table.cards td[data-line="3"]+td[data-line="3"]::before{content:" · "}
       table.cards td[data-line="act"]{display:block;margin-top:8px}
@@ -149,7 +153,7 @@
       table.kv td,table.kv th{word-break:break-word}
     }
     @media(min-width:980px){
-      .nav-toggle,.nav-bg,.drawer-handle{display:none !important}
+      .nav-toggle,.nav-bg,.drawer-handle,.tabbar{display:none !important}
     }
 
   </style>
@@ -192,6 +196,11 @@
   <div class="drawer-bg" id="drawerBg"></div>
   <aside class="drawer" id="drawer"><div class="drawer-handle"></div><div id="drawerBody"></div></aside>
   <div class="modal-bg" id="modalBg"><div class="modal" id="modalBody"></div></div>
+  <nav class="tabbar" id="tabbar">
+    <button type="button" data-tab="dashboard"><span class="ico">⌂</span>홈</button>
+    <button type="button" data-tab="schedule"><span class="ico">▦</span>예약</button>
+    <button type="button" data-tab="board"><span class="ico">→</span>출장</button>
+  </nav>
   <div class="toast" id="toast"></div>
 
 <script>
@@ -287,6 +296,11 @@
   function badge(st) {
     return '<span class="badge ' + statusTone(st) + '">' + esc(STATUS[st] || st || '-') + '</span>';
   }
+  function custBadge(st) {
+    const label = st === 'active' ? '거래중' : (st === 'dormant' ? '휴면' : (st === 'closed' ? '종료' : (st || '-')));
+    const tone = st === 'active' ? 'b-go' : (st === 'closed' ? 'b-unpaid' : 'b-stop');
+    return '<span class="badge ' + tone + '">' + esc(label) + '</span>';
+  }
   function settleBadge(st) {
     const s = st || '정산없음';
     return '<span class="badge ' + settleTone(s) + '">' + esc(s) + '</span>';
@@ -309,6 +323,10 @@
   });
   document.getElementById('btnLogout').onclick = () => { localStorage.clear(); location.href = '/hq/login.html'; };
   document.getElementById('btnRefresh').onclick = () => refresh();
+  document.getElementById('tabbar').onclick = (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (b) showPanel(b.dataset.tab);
+  };
   document.getElementById('drawerBg').onclick = closeDrawer;
   document.getElementById('modalBg').onclick = (e) => { if (e.target.id === 'modalBg') closeModal(); };
   document.getElementById('uName').textContent = user.name || user.login || 'user';
@@ -319,6 +337,7 @@
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     document.getElementById('p-' + name).classList.add('active');
     nav.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.panel === name));
+    document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
     document.getElementById('title').textContent = (MENUS.find((m) => m[0] === name) || [, name])[1];
     document.getElementById('meta').textContent = new Date().toLocaleString('ko-KR');
     refresh();
@@ -529,9 +548,9 @@
         '<div class="desk-hit" data-id="' + esc(c.customer_id) + '">' +
         '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center">' +
         '<div><b>' + esc(c.display_name) + '</b></div>' +
-        '<span class="pill ' + (c.status === 'active' ? 'ok' : 'warn') + '">' + esc(c.status || '') + '</span></div>' +
-        '<div class="mono" style="margin-top:4px">' + esc(c.primary_phone) + '</div>' +
-        '<div class="muted" style="margin-top:2px">' + esc(c.address || '') + '</div></div>'
+        custBadge(c.status) + '</div>' +
+        '<div class="mono" style="margin-top:4px;color:#f3f7ff">' + esc(c.primary_phone) + '</div>' +
+        '<div style="margin-top:2px;color:#c5d4ea;font-size:12px">' + esc(c.address || '') + '</div></div>'
       ).join('');
     box.querySelectorAll('.desk-hit').forEach((el) => {
       el.onclick = () => {
@@ -1178,7 +1197,7 @@
         ? '<table class="cards"><thead><tr><th>표시명</th><th>전화</th><th>주소</th><th>상태</th></tr></thead><tbody>' +
           rows.map((c) => '<tr class="clickable" data-id="' + esc(c.customer_id) + '"><td data-line="1">' + esc(c.display_name) +
             '</td><td class="mono" data-line="2">' + esc(c.primary_phone) + '</td><td data-line="3">' + esc(c.address) + '</td><td data-line="b">' +
-            esc(c.status) + '</td></tr>').join('') + '</tbody></table>'
+            custBadge(c.status) + '</td></tr>').join('') + '</tbody></table>'
         : '<div class="empty">없음</div>';
       document.querySelectorAll('#csList tr.clickable').forEach((tr) => tr.onclick = () => openCustomerEditor(tr.dataset.id));
     };
