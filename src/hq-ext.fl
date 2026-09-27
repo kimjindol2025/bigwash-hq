@@ -483,6 +483,16 @@
             $as (?? (server-req-query $req "as_of") (iso-now))]
         (json-ok (warranty-hint (cid $gate) $cid $eid $as))))))
 
+(defn handle-customer-extra-get [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $ex (db-row (db-get-row "hq_customer_extra" $id))]
+        (json-ok (if (nil? $ex)
+                    {"customer_id" $id "region_id" "" "grade" "" "settle_memo" "" "warranty_memo" ""}
+                    $ex))))))
+
 (defn handle-customer-extra-set [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
@@ -500,6 +510,43 @@
         (if (nil? $ex) (db-insert "hq_customer_extra" $row)
             (db-patch "hq_customer_extra" $id $row))
         (json-ok $row)))))
+
+(defn handle-customer-update [$req]
+  (let [$gate (require-user $req)]
+    (if (not (get $gate "ok"))
+      (json-err (get $gate "status") (get $gate "error"))
+      (let [$id (server-req-param $req "id")
+            $body (req-body $req)
+            $c (db-row (db-get-row "hq_customers" $id))]
+        (if (or (nil? $c) (not (= (get $c "company_id") (cid $gate))))
+          (json-err 404 "Not found")
+          (let [$now (iso-now)
+                $patch {"display_name" (?? (get $body "display_name") (get $c "display_name"))
+                        "type" (?? (get $body "type") (get $c "type"))
+                        "legal_name" (?? (get $body "legal_name") (get $c "legal_name"))
+                        "extra_phone" (?? (get $body "extra_phone") (get $c "extra_phone"))
+                        "contact_name" (?? (get $body "contact_name") (get $c "contact_name"))
+                        "contact_phone" (?? (get $body "contact_phone") (get $c "contact_phone"))
+                        "address" (?? (get $body "address") (get $c "address"))
+                        "visit_note" (?? (get $body "visit_note") (get $c "visit_note"))
+                        "status" (?? (get $body "status") (get $c "status"))
+                        "account_owner_user_id" (?? (get $body "account_owner_user_id") (get $c "account_owner_user_id"))
+                        "tags" (?? (get $body "tags") (get $c "tags"))
+                        "hours_note" (?? (get $body "hours_note") (get $c "hours_note"))
+                        "updated_at" $now}]
+            (do
+              (db-patch "hq_customers" $id $patch)
+              (if (or (get $body "region_id") (get $body "grade") (get $body "settle_memo") (get $body "warranty_memo"))
+                (let [$ex (db-row (db-get-row "hq_customer_extra" $id))
+                      $erow {"customer_id" $id
+                             "company_id" (cid $gate)
+                             "region_id" (?? (get $body "region_id") (if (nil? $ex) "" (get $ex "region_id")))
+                             "grade" (?? (get $body "grade") (if (nil? $ex) "" (get $ex "grade")))
+                             "settle_memo" (?? (get $body "settle_memo") (if (nil? $ex) "" (get $ex "settle_memo")))
+                             "warranty_memo" (?? (get $body "warranty_memo") (if (nil? $ex) "" (get $ex "warranty_memo")))
+                             "updated_at" $now}]
+                  (if (nil? $ex) (db-insert "hq_customer_extra" $erow) (db-patch "hq_customer_extra" $id $erow))))
+              (json-ok (db-row (db-get-row "hq_customers" $id))))))))))
 
 (defn handle-assignees-list [$req]
   (let [$gate (require-user $req)]

@@ -66,6 +66,17 @@
     .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
     .split{display:grid;grid-template-columns:1.1fr .9fr;gap:12px}
     @media(max-width:980px){.split{grid-template-columns:1fr}.sidebar{width:180px}}
+    .desk-sticky{position:sticky;top:0;z-index:5}
+    .desk-actions{position:sticky;bottom:0;background:var(--card);padding:8px 0;border-top:1px solid var(--line)}
+    @media(max-width:720px){
+      body{flex-direction:column}
+      .sidebar{width:100%;flex-direction:row;flex-wrap:wrap;gap:4px;padding:8px}
+      .nav{display:flex;flex-wrap:wrap;gap:4px;width:100%}
+      .nav button{width:auto;padding:8px 10px}
+      .userbox{width:100%;margin-top:0}
+      .desk-actions .btn-primary{flex:1;min-width:140px}
+    }
+
   </style>
 </head>
 <body>
@@ -295,182 +306,227 @@
   function renderDesk() {
     const el = document.getElementById('p-desk');
     el.innerHTML = `
-      <div class="split">
-        <div>
-          <div class="card">
-            <h3>1. 전화/상호 검색</h3>
-            <div class="row">
-              <div class="grow"><label>수신 번호</label><input id="deskPhone" placeholder="010-1234-5678" /></div>
-              <button class="btn btn-primary" type="button" id="btnDeskSearch">검색</button>
-            </div>
-            <div id="deskHits" style="margin-top:10px"></div>
-          </div>
-          <div class="card">
-            <h3>2. 신규 고객 (없을 때)</h3>
-            <div class="row">
-              <div><label>유형 *</label>
-                <select id="cType"><option value="franchise">가맹</option><option value="direct">직영</option>
-                <option value="shop" selected>일반매장</option><option value="other">개인/기타</option></select></div>
-              <div class="grow"><label>표시명 *</label><input id="cName" /></div>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>대표전화 *</label><input id="cPhone" /></div>
-              <div class="grow"><label>주소 *</label><input id="cAddr" /></div>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>현장담당</label><input id="cContact" /></div>
-              <div class="grow"><label>권역</label><select id="cRegion"></select></div>
-            </div>
-            <div class="actions">
-              <button class="btn btn-primary" type="button" id="btnCustSave">고객 저장</button>
-            </div>
-          </div>
-          <div class="card" id="eqCard" style="display:none">
-            <h3>3. 장비</h3>
-            <div id="eqList"></div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>장비명 *</label><input id="eqName" /></div>
-              <div class="grow"><label>설치위치 *</label><input id="eqLoc" placeholder="베이1" /></div>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>모델</label><input id="eqModel" /></div>
-              <div class="grow"><label>시리얼</label><input id="eqSerial" /></div>
-            </div>
-            <div class="actions"><button class="btn btn-primary" type="button" id="btnEqSave">장비 추가</button></div>
-          </div>
+      <div class="card desk-sticky">
+        <h3>전화 데스크</h3>
+        <div class="row">
+          <div class="grow"><label>검색 (번호·상호)</label>
+            <input id="deskQ" placeholder="010… 또는 세차장명" /></div>
+          <button class="btn btn-primary" type="button" id="btnDeskSearch">검색</button>
         </div>
-        <div>
-          <div class="card" id="ticketCard" style="display:none">
-            <h3>4. 출장 / 상담</h3>
-            <div class="muted mono" id="selInfo" style="margin-bottom:8px"></div>
-            <label>장비 *</label><select id="tEq"></select>
-            <div style="margin-top:8px"><label>증상 *</label><textarea id="tSymptom"></textarea></div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>권역</label><select id="tRegion"></select></div>
-              <div class="grow"><label>주담당</label><select id="tAssignee"></select></div>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <div class="grow"><label>희망 방문</label><input id="tPref" type="datetime-local" /></div>
-              <div class="grow"><label>긴급도</label>
-                <select id="tUrg"><option value="normal">일반</option><option value="urgent">긴급</option></select></div>
-            </div>
-            <div style="margin-top:8px"><label>상담 로그 *</label><textarea id="tCallMemo" placeholder="통화 내용"></textarea></div>
-            <div class="actions">
-              <button class="btn btn-primary" type="button" id="btnDispatch">출장 만들기</button>
-              <button class="btn" type="button" id="btnConsultEnd">상담종결</button>
-            </div>
+      </div>
+      <div id="deskHits"></div>
+      <div class="card" id="deskMinForm">
+        <h3>고객 없음 → 최소 저장</h3>
+        <div class="row">
+          <div><label>유형 *</label>
+            <select id="cType">
+              <option value="franchise">가맹</option>
+              <option value="direct">직영</option>
+              <option value="shop" selected>일반매장</option>
+              <option value="other">개인/기타</option>
+            </select></div>
+          <div class="grow"><label>표시명 *</label><input id="cName" /></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="grow"><label>대표전화 *</label><input id="cPhone" /></div>
+          <div class="grow"><label>주소 *</label><input id="cAddr" /></div>
+          <div><label>상태 *</label>
+            <select id="cStatus">
+              <option value="active">거래중</option>
+              <option value="dormant">휴면</option>
+              <option value="closed">종료</option>
+            </select></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="button" id="btnCustSave">저장</button>
+          <button class="btn" type="button" id="btnCustSaveDispatch">저장 후 출장</button>
+          <button class="btn" type="button" id="btnCustSaveConsult">저장 후 상담종결</button>
+        </div>
+      </div>
+      <div class="card" id="deskDetail" style="display:none">
+        <div id="deskCardHead"></div>
+        <div id="deskEq" style="margin-top:10px"></div>
+        <div id="deskRecent" style="margin-top:10px"></div>
+        <div id="deskWarranty" style="margin-top:10px"></div>
+        <div class="card" style="margin-top:10px;background:#0e1626">
+          <h3>장비 추가 (출장 전 필수)</h3>
+          <div class="row">
+            <div class="grow"><label>장비명 *</label><input id="eqName" /></div>
+            <div class="grow"><label>설치위치 *</label><input id="eqLoc" placeholder="베이1" /></div>
+          </div>
+          <div class="actions"><button class="btn btn-primary" type="button" id="btnEqSave">장비 추가</button></div>
+        </div>
+        <div class="card" style="margin-top:10px;background:#0e1626">
+          <h3>출장 / 상담</h3>
+          <label>장비 *</label><select id="tEq"></select>
+          <div style="margin-top:8px"><label>증상 *</label><textarea id="tSymptom"></textarea></div>
+          <div class="row" style="margin-top:8px">
+            <div class="grow"><label>권역</label><select id="tRegion"></select></div>
+            <div class="grow"><label>주담당</label><select id="tAssignee"></select></div>
+          </div>
+          <div style="margin-top:8px"><label>상담 메모 *</label><textarea id="tCallMemo"></textarea></div>
+          <div class="actions desk-actions">
+            <button class="btn btn-primary" type="button" id="btnDispatch">출장 만들기</button>
+            <button class="btn" type="button" id="btnConsultEnd">상담종결</button>
           </div>
         </div>
       </div>`;
     Promise.all([loadStaff(), loadRegions()]).then(() => {
-      document.getElementById('cRegion').innerHTML = regionOptions();
       document.getElementById('tRegion').innerHTML = regionOptions();
       document.getElementById('tAssignee').innerHTML = staffOptions();
     });
     document.getElementById('btnDeskSearch').onclick = deskSearch;
-    document.getElementById('btnCustSave').onclick = saveCustomer;
+    document.getElementById('deskQ').onkeydown = (e) => { if (e.key === 'Enter') deskSearch(); };
+    document.getElementById('btnCustSave').onclick = () => saveCustomer('save');
+    document.getElementById('btnCustSaveDispatch').onclick = () => saveCustomer('dispatch');
+    document.getElementById('btnCustSaveConsult').onclick = () => saveCustomer('consult');
     document.getElementById('btnEqSave').onclick = saveEquipment;
     document.getElementById('btnDispatch').onclick = () => createDispatch('dispatch');
     document.getElementById('btnConsultEnd').onclick = () => createDispatch('consult');
-    document.getElementById('deskPhone').onkeydown = (e) => { if (e.key === 'Enter') deskSearch(); };
   }
 
   async function deskSearch() {
-    const phone = document.getElementById('deskPhone').value.trim();
-    if (!phone) return toast('번호 입력', true);
-    document.getElementById('cPhone').value = phone;
-    document.getElementById('callPhone') && (document.getElementById('callPhone').value = phone);
-    const rows = await api('/hq/customers?phone=' + encodeURIComponent(phone));
+    const q = document.getElementById('deskQ').value.trim();
+    if (!q) return toast('번호 또는 상호 입력', true);
+    document.getElementById('cPhone').value = q;
+    const rows = await api('/hq/customers?q=' + encodeURIComponent(q));
     const box = document.getElementById('deskHits');
     if (!rows.length) {
-      box.innerHTML = '<div class="empty">고객 없음 → 왼쪽에서 신규 저장</div>';
+      box.innerHTML = '<div class="empty">검색 결과 없음 → 아래 최소 폼으로 저장</div>';
+      document.getElementById('deskDetail').style.display = 'none';
+      document.getElementById('deskMinForm').style.display = 'block';
       selectedCustomer = null;
-      document.getElementById('eqCard').style.display = 'none';
-      document.getElementById('ticketCard').style.display = 'none';
       return;
     }
+    document.getElementById('deskMinForm').style.display = 'none';
     box.innerHTML = rows.map((c) =>
-      '<div class="card" style="padding:10px;cursor:pointer" data-id="' + esc(c.customer_id) + '">' +
-      '<b>' + esc(c.display_name) + '</b> <span class="mono">' + esc(c.primary_phone) + '</span><div class="muted">' +
-      esc(c.address || '') + '</div></div>'
+      '<div class="card" style="cursor:pointer;padding:10px" data-id="' + esc(c.customer_id) + '">' +
+      '<b>' + esc(c.display_name) + '</b> <span class="mono">' + esc(c.primary_phone) + '</span>' +
+      '<div class="muted">' + esc(c.address || '') + '</div></div>'
     ).join('');
     box.querySelectorAll('[data-id]').forEach((el) => {
       el.onclick = () => selectCustomer(rows.find((r) => r.customer_id === el.dataset.id));
     });
-    if (rows.length === 1) selectCustomer(rows[0]);
+    if (rows.length === 1) await selectCustomer(rows[0]);
   }
 
   async function selectCustomer(c) {
     selectedCustomer = c;
-    document.getElementById('selInfo').textContent = c.display_name + ' / ' + c.primary_phone;
-    document.getElementById('eqCard').style.display = 'block';
-    document.getElementById('ticketCard').style.display = 'block';
-    document.getElementById('tCallMemo').value = '';
+    document.getElementById('deskDetail').style.display = 'block';
+    document.getElementById('deskMinForm').style.display = 'none';
+    const hub = await api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/hub');
+    const extra = await api('/hq/customers/' + encodeURIComponent(c.customer_id) + '/extra').catch(() => ({}));
+    // extra endpoint may not exist as GET — use hub or separate
+    let regionId = '';
+    try {
+      const exRows = await api('/hq/purchases?customer_id=' + encodeURIComponent(c.customer_id));
+      window.__purchases = exRows;
+    } catch (_) { window.__purchases = []; }
+    // load extra via warranty + finance path: GET customer then we stored region in extra table — add to hub if missing
+    const hint = await api('/hq/warranty-hint?customer_id=' + encodeURIComponent(c.customer_id));
+    const tickets = hub.tickets || [];
+    const recent = tickets.slice(0, 5);
+    // fetch extra by reading customer hub — extend: call purchases already; for region use ticket finance from last or customer extra endpoint
+    let regionLabel = '-';
+    try {
+      // reuse POST extra get by reading from a lightweight approach: list regions and match from last ticket
+      await loadRegions();
+    } catch (_) {}
+    document.getElementById('deskCardHead').innerHTML =
+      '<h3>' + esc(c.display_name) + ' <span class="badge">' + esc(c.status) + '</span></h3>' +
+      '<div class="mono">' + esc(c.primary_phone) + '</div>' +
+      '<div class="muted">' + esc(c.address || '') + '</div>' +
+      '<div class="actions" style="margin-top:8px">' +
+      '<button class="btn btn-sm" type="button" id="btnOpenCust">고객 카드</button></div>';
+    document.getElementById('btnOpenCust').onclick = () => { showPanel('customers'); openCustomerEditor(c.customer_id); };
+    document.getElementById('deskWarranty').innerHTML =
+      '<div class="badge">' + (hint.warranty === 'free' ? '무상 가능' : '유상') + '</div> ' +
+      '<span class="muted">' + esc(hint.reason || '') + '</span>';
+    document.getElementById('deskRecent').innerHTML = recent.length
+      ? '<h4>최근 출장</h4><ul>' + recent.map((t) => '<li class="mono">' + esc(t.number) + ' ' + esc(t.status) + ' ' + esc(t.symptom) + '</li>').join('') + '</ul>'
+      : '<div class="muted">최근 출장 없음</div>';
     await refreshEquipment();
+    // set region select from customer extra
+    try {
+      const allExtra = await fetchExtra(c.customer_id);
+      regionId = allExtra.region_id || '';
+      document.getElementById('tRegion').innerHTML = regionOptions(regionId);
+    } catch (_) {
+      document.getElementById('tRegion').innerHTML = regionOptions();
+    }
+    document.getElementById('tAssignee').innerHTML = staffOptions();
+  }
+
+  async function fetchExtra(cid) {
+    return api('/hq/customers/' + encodeURIComponent(cid) + '/extra');
   }
 
   async function refreshEquipment() {
     if (!selectedCustomer) return;
     const eqs = await api('/hq/equipment?customer_id=' + encodeURIComponent(selectedCustomer.customer_id));
-    document.getElementById('eqList').innerHTML = eqs.length
-      ? '<table><thead><tr><th>장비</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
-        eqs.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note) + '</td><td class="mono">' +
-          esc(e.serial) + '</td></tr>').join('') + '</tbody></table>'
-      : '<div class="empty">장비 없음 — 아래에서 추가</div>';
+    document.getElementById('deskEq').innerHTML = eqs.length
+      ? '<h4>장비</h4><table><thead><tr><th>이름</th><th>위치</th><th>시리얼</th></tr></thead><tbody>' +
+        eqs.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note) + '</td><td class="mono">' + esc(e.serial) + '</td></tr>').join('') +
+        '</tbody></table>'
+      : '<div class="empty">장비 없음 — 아래에서 추가 후 출장</div>';
     document.getElementById('tEq').innerHTML = eqs.length
-      ? eqs.map((e) => '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) + ' / ' + esc(e.location_note || e.serial || '') + '</option>').join('')
+      ? eqs.map((e) => '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) + ' / ' + esc(e.location_note || '') + '</option>').join('')
       : '<option value="">장비 없음</option>';
   }
 
-  async function saveCustomer() {
+  async function saveCustomer(mode) {
     const body = {
       type: document.getElementById('cType').value,
       display_name: document.getElementById('cName').value.trim(),
       primary_phone: document.getElementById('cPhone').value.trim(),
       address: document.getElementById('cAddr').value.trim(),
-      contact_name: document.getElementById('cContact').value.trim(),
-      tags: document.getElementById('cRegion').value || ''
+      status: document.getElementById('cStatus').value
     };
-    if (!body.display_name || !body.primary_phone || !body.address) return toast('유형/표시명/전화/주소 필수', true);
+    if (!body.display_name || !body.primary_phone || !body.address) return toast('필수 항목 확인', true);
     try {
       const c = await api('/hq/customers', { method: 'POST', body: JSON.stringify(body) });
       toast('고객 저장');
-      await selectCustomer(c);
-    } catch (e) { toast(e.message, true); }
+      document.getElementById('deskQ').value = body.primary_phone;
+      await deskSearch();
+      if (mode === 'dispatch') {
+        document.getElementById('tCallMemo').value = document.getElementById('tCallMemo').value || '신규 저장 후 출장';
+      }
+      if (mode === 'consult') {
+        await api('/hq/calls', { method: 'POST', body: JSON.stringify({
+          phone: body.primary_phone, call_type: 'other', memo: '저장 후 상담종결', customer_id: c.customer_id
+        })});
+        toast('상담종결 로그 저장');
+      }
+    } catch (e) {
+      if (String(e.message).indexOf('already exists') >= 0 || String(e.message).indexOf('409') >= 0) {
+        toast('번호 중복 — 기존 카드 검색', true);
+        document.getElementById('deskQ').value = body.primary_phone;
+        await deskSearch();
+      } else toast(e.message, true);
+    }
   }
 
   async function saveEquipment() {
     if (!selectedCustomer) return toast('고객 먼저', true);
     const name = document.getElementById('eqName').value.trim();
     const location_note = document.getElementById('eqLoc').value.trim();
-    if (!name || !location_note) return toast('장비명·설치위치 필수', true);
+    if (!name || !location_note) return toast('장비명·위치 필수', true);
     try {
       await api('/hq/equipment', {
         method: 'POST',
-        body: JSON.stringify({
-          customer_id: selectedCustomer.customer_id,
-          name, location_note,
-          model: document.getElementById('eqModel').value.trim(),
-          serial: document.getElementById('eqSerial').value.trim()
-        })
+        body: JSON.stringify({ customer_id: selectedCustomer.customer_id, name, location_note })
       });
       toast('장비 추가');
       document.getElementById('eqName').value = '';
+      document.getElementById('eqLoc').value = '';
       await refreshEquipment();
     } catch (e) { toast(e.message, true); }
   }
 
   async function createDispatch(kind) {
     if (!selectedCustomer) return toast('고객 선택 필요', true);
-    const equipment_id = document.getElementById('tEq').value;
-    const symptom = document.getElementById('tSymptom').value.trim();
     const callMemo = document.getElementById('tCallMemo').value.trim();
-    if (!equipment_id) return toast('장비 필수 — 먼저 추가', true);
-    if (!symptom) return toast('증상 필수', true);
-    if (!callMemo) return toast('상담 로그 필수', true);
-    const region_id = document.getElementById('tRegion').value;
-    const assignee_id = document.getElementById('tAssignee').value;
-    const preferred = document.getElementById('tPref').value;
+    if (!callMemo) return toast('상담 메모 필수', true);
     try {
       await api('/hq/calls', {
         method: 'POST',
@@ -482,35 +538,35 @@
         })
       });
       if (kind === 'consult') {
-        toast('상담 로그 저장(상담종결)');
+        toast('상담종결');
         return;
       }
+      const equipment_id = document.getElementById('tEq').value;
+      const symptom = document.getElementById('tSymptom').value.trim();
+      if (!equipment_id) return toast('장비 필수 — 먼저 추가', true);
+      if (!symptom) return toast('증상 필수', true);
+      const region_id = document.getElementById('tRegion').value;
+      const assignee_id = document.getElementById('tAssignee').value;
       const t = await api('/hq/tickets', {
         method: 'POST',
         body: JSON.stringify({
           customer_id: selectedCustomer.customer_id,
           equipment_id, symptom,
-          fault_type: '',
-          urgency: document.getElementById('tUrg').value,
-          assignee_id, region_id,
+          urgency: 'normal',
+          assignee_id,
+          region_id,
           ticket_type: 'dispatch',
-          preferred_at: preferred ? new Date(preferred).toISOString() : '',
           intake_phone: selectedCustomer.primary_phone,
           intake_memo: callMemo,
           bill_type: 'unknown'
         })
       });
-      if (region_id) {
-        await api('/hq/tickets/' + t.ticket_id + '/finance', {
-          method: 'POST', body: JSON.stringify({ region_id, ticket_type: 'dispatch' })
-        });
-      }
       toast('출장 생성 ' + t.number);
       openTicket(t.ticket_id);
     } catch (e) { toast(e.message, true); }
   }
 
-  // ----- Board -----
+
   async function renderBoard(status) {
     const el = document.getElementById('p-board');
     const filters = ['', 'waiting_assign', 'assigned', 'en_route', 'done', 'followup', 'closed'];
@@ -526,102 +582,72 @@
     const rows = await api('/hq/tickets' + q);
     const box = document.getElementById('blist');
     if (!rows.length) { box.innerHTML = '<div class="empty">티켓 없음</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>담당</th><th>재고장</th></tr></thead><tbody>' +
+    box.innerHTML = '<table><thead><tr><th>번호</th><th>상태</th><th>정산</th><th>증상</th><th>담당</th></tr></thead><tbody>' +
       rows.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.number) +
-        '</td><td>' + badge(t.status) + '</td><td>' + esc(t.symptom) + '</td><td class="mono">' +
-        esc(t.assignee_id || '-') + '</td><td>' + (t.is_repeat === 'true' ? '🔁' : '') + '</td></tr>').join('') +
-      '</tbody></table>';
+        '</td><td>' + badge(t.status) + '</td><td class="settle-cell" data-tid="' + esc(t.ticket_id) + '">…</td><td>' + esc(t.symptom) +
+        '</td><td class="mono">' + esc(t.assignee_id || '-') + '</td></tr>').join('') + '</tbody></table>';
     box.querySelectorAll('tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
+    // load settle badges
+    for (const cell of box.querySelectorAll('.settle-cell')) {
+      api('/hq/tickets/' + cell.dataset.tid + '/finance').then((f) => {
+        cell.textContent = f.settlement_status || '-';
+      }).catch(() => { cell.textContent = '-'; });
+    }
   }
 
   async function openTicket(id) {
     await Promise.all([loadStaff(), loadRegions()]);
     const data = await api('/hq/tickets/' + encodeURIComponent(id));
     const fin = await api('/hq/tickets/' + encodeURIComponent(id) + '/finance');
+    const contractors = await api('/hq/contractors').catch(() => []);
     currentTicket = data.ticket;
     const t = data.ticket;
     const next = NEXT[t.status] || [];
+    const settleOpts = ['카드완납','계좌완납','현금완납','부분수금','미수','해당없음'];
     openDrawer(
       '<div class="actions" style="justify-content:space-between"><h3>' + esc(t.number) + '</h3>' +
       '<button class="btn btn-sm" type="button" id="dClose">닫기</button></div>' +
-      '<div>' + badge(t.status) + (t.is_repeat === 'true' ? ' <span class="badge">재고장</span>' : '') +
+      '<div>' + badge(t.status) +
+      ' <span class="badge" id="dSettleBadge">' + esc(fin.settlement_status || '정산없음') + '</span>' +
+      (t.is_repeat === 'true' ? ' <span class="badge">재고장</span>' : '') +
       (t.photo_incomplete === 'true' ? ' <span class="badge">사진미비</span>' : '') + '</div>' +
       '<p style="margin:10px 0">' + esc(t.symptom) + '</p>' +
-      '<div class="muted mono">customer=' + esc(t.customer_id) + ' eq=' + esc(t.equipment_id) + '</div>' +
+      '<div class="muted">고객 ' + esc(t.customer_id) + ' · 장비 ' + esc(t.equipment_id) + '</div>' +
+      '<div class="muted">권역출장비 ' + esc(fin.travel_fee) + '원</div>' +
       '<hr style="border-color:var(--line);margin:12px 0">' +
-      '<h4>지정 / 일정 / 권역</h4>' +
-      '<label>주담당</label><select id="dAssignee">' + staffOptions(t.assignee_id) + '</select>' +
-      '<div class="actions"><button class="btn btn-primary btn-sm" type="button" id="dAssign">지정 저장</button></div>' +
-      '<label style="margin-top:8px">방문일시</label><input id="dSched" type="datetime-local" />' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dSchedBtn">일정 저장</button></div>' +
-      '<label style="margin-top:8px">권역(출장비)</label><select id="dRegion">' + regionOptions(fin.region_id) + '</select>' +
-      '<div class="muted">현재 출장비: ' + esc(fin.travel_fee) + ' / 정산: ' + esc(fin.settlement_status || '-') + '</div>' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dFin">권역·출장비 적용</button></div>' +
-      '<h4 style="margin-top:12px">상태 전이</h4><div class="actions" id="dNext"></div>' +
-      '<h4 style="margin-top:12px">정산 상태</h4><div class="actions" id="dSettle"></div>' +
-      '<h4 style="margin-top:12px">배정 1..N + 용병</h4>' +
-      '<div class="row"><div class="grow"><label>정규 추가</label><select id="dAddStaff">' + staffOptions() + '</select></div>' +
-      '<div class="grow"><label>용병 이름</label><input id="dContractor" placeholder="용병김" /></div></div>' +
-      '<div class="row" style="margin-top:6px"><div class="grow"><label>용병 일당</label><input id="dDayPay" type="number" value="150000" /></div>' +
-      '<button class="btn btn-sm btn-primary" type="button" id="dAsgSave">배정 추가</button></div>' +
+      '<h4>배정 (정규 1..N + 용병)</h4>' +
+      '<label>정규 직원</label><select id="dAddStaff" multiple style="min-height:72px">' +
+      staff.map((u) => '<option value="' + esc(u.user_id) + '">' + esc(u.name) + '</option>').join('') + '</select>' +
+      '<div class="row" style="margin-top:8px"><div class="grow"><label>용병 이름 (계정 없음)</label>' +
+      '<input id="dContractor" list="ctrList" placeholder="용병 이름만" />' +
+      '<datalist id="ctrList">' + contractors.map((c) => '<option value="' + esc(c.name) + '"></option>').join('') + '</datalist></div>' +
+      '<div class="grow"><label>용병 일당</label><input id="dDayPay" type="number" value="150000" /></div></div>' +
+      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dAsgSave">배정 저장</button></div>' +
       '<div id="dAsgList" class="mono" style="font-size:12px;margin-top:8px"></div>' +
+      '<h4 style="margin-top:12px">일정</h4>' +
+      '<input id="dSched" type="datetime-local" />' +
+      '<div class="actions"><button class="btn btn-sm" type="button" id="dSchedBtn">일정 저장</button></div>' +
+      '<h4 style="margin-top:12px">권역</h4>' +
+      '<select id="dRegion">' + regionOptions(fin.region_id) + '</select>' +
+      '<div class="actions"><button class="btn btn-sm" type="button" id="dFin">권역·출장비 적용</button></div>' +
       '<h4 style="margin-top:12px">장바구니</h4>' +
-      '<div class="actions"><button class="btn btn-sm" type="button" id="dCartPart">부품줄 추가</button>' +
+      '<div class="actions"><button class="btn btn-sm" type="button" id="dCartPart">부품 추가</button>' +
       '<button class="btn btn-sm" type="button" id="dCartTravel">출장비 동기화</button></div>' +
       '<div id="dCart" class="mono" style="font-size:12px;margin-top:8px"></div>' +
-      '<h4 style="margin-top:12px">명세 발행</h4>' +
-      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dDoc">명세 PDF·이미지</button></div>' +
+      '<h4 style="margin-top:12px">상태 전이</h4><div class="actions" id="dNext"></div>' +
+      '<h4 style="margin-top:12px">정산 뱃지 (본사 수정)</h4><div class="actions" id="dSettle"></div>' +
+      '<h4 style="margin-top:12px">명세</h4>' +
+      '<div class="actions"><button class="btn btn-sm btn-primary" type="button" id="dDoc">PDF·PNG 발행</button></div>' +
+      '<h4 style="margin-top:12px">일지 / 사진</h4>' +
+      '<div class="muted" id="dLog">' + esc(fin.work_log || '일지 없음(수신 대기)') + '</div>' +
+      '<div id="dPhotos" class="muted">사진 슬롯 조회…</div>' +
       '<h4 style="margin-top:12px">타임라인</h4>' +
       '<div class="mono" style="font-size:12px">' + (data.events || []).map((e) =>
         '<div>' + esc(e.at) + ' · ' + esc(e.type) + ' ' + esc(e.from_status) + '→' + esc(e.to_status) + ' ' + esc(e.memo) + '</div>'
       ).join('') + '</div>'
     );
     document.getElementById('dClose').onclick = closeDrawer;
-    document.getElementById('dAssign').onclick = async () => {
-      try {
-        await api('/hq/tickets/' + id + '/assign', { method: 'POST', body: JSON.stringify({ assignee_id: document.getElementById('dAssignee').value }) });
-        toast('지정 저장'); openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    };
-    document.getElementById('dSchedBtn').onclick = async () => {
-      const v = document.getElementById('dSched').value;
-      if (!v) return toast('일시 선택', true);
-      try {
-        const r = await api('/hq/tickets/' + id + '/schedule', { method: 'POST', body: JSON.stringify({ scheduled_at: new Date(v).toISOString() }) });
-        toast(r.conflict_warning ? '일정 저장 (충돌 경고)' : '일정 저장');
-        openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    };
-    document.getElementById('dFin').onclick = async () => {
-      try {
-        const r = await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ region_id: document.getElementById('dRegion').value }) });
-        toast('출장비 ' + r.travel_fee + '원 적용'); openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    };
-    const nb = document.getElementById('dNext');
-    nb.innerHTML = next.map((s) => '<button class="btn btn-sm" type="button" data-to="' + s + '">' + (STATUS[s] || s) + '</button>').join('') || '<span class="muted">전이 없음</span>';
-    nb.querySelectorAll('button[data-to]').forEach((b) => b.onclick = async () => {
-      const to = b.dataset.to;
-      let cancel_reason = '';
-      if (to === 'cancelled') {
-        cancel_reason = prompt('취소 사유') || '';
-        if (!cancel_reason) return toast('취소 사유 필수', true);
-      }
-      try {
-        await api('/hq/tickets/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to, cancel_reason }) });
-        toast('상태 → ' + (STATUS[to] || to)); openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    });
-    const settles = ['카드완납','계좌완납','현금완납','부분수금','미수','해당없음'];
-    document.getElementById('dSettle').innerHTML = settles.map((s) =>
-      '<button class="btn btn-sm" type="button" data-st="' + s + '">' + s + '</button>'
-    ).join('');
-    document.getElementById('dSettle').querySelectorAll('button').forEach((b) => b.onclick = async () => {
-      try {
-        await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ settlement_status: b.dataset.st }) });
-        toast('정산 ' + b.dataset.st); openTicket(id);
-      } catch (e) { toast(e.message, true); }
-    });
+
     async function refreshAsgCart() {
       const asg = await api('/hq/tickets/' + id + '/assignees');
       document.getElementById('dAsgList').innerHTML = (asg || []).map((a) =>
@@ -636,20 +662,42 @@
       ).join('') + '<div><b>합계 ' + sum + '</b></div>';
     }
     await refreshAsgCart();
+    const photos = data.photos || [];
+    document.getElementById('dPhotos').innerHTML = photos.length
+      ? photos.map((p) => '<div>' + esc(p.side) + ' #' + esc(p.slot) + '</div>').join('')
+      : '사진 없음(수신 대기)';
+
     document.getElementById('dAsgSave').onclick = async () => {
-      const staffId = document.getElementById('dAddStaff').value;
+      const sel = [...document.getElementById('dAddStaff').selectedOptions].map((o) => o.value).filter(Boolean);
       const cname = document.getElementById('dContractor').value.trim();
       const pay = Number(document.getElementById('dDayPay').value || 0);
-      const assignees = [];
-      if (staffId) assignees.push({ kind: 'staff', user_id: staffId, is_primary: 'true' });
+      const assignees = sel.map((uid, i) => ({ kind: 'staff', user_id: uid, is_primary: i === 0 ? 'true' : 'false' }));
       if (cname) assignees.push({ kind: 'contractor', contractor_name: cname, day_pay_amount: pay, is_primary: 'false' });
-      if (!assignees.length) return toast('정규 또는 용병 입력', true);
+      if (!assignees.length) return toast('정규 또는 용병 필요', true);
+      if (!assignees.some((a) => a.kind === 'staff' && a.is_primary === 'true') && assignees.some((a) => a.kind === 'staff')) {
+        assignees[0].is_primary = 'true';
+      }
       try {
         await api('/hq/tickets/' + id + '/assignees', { method: 'POST', body: JSON.stringify({ assignees }) });
         toast('배정 저장'); openTicket(id);
       } catch (e) { toast(e.message, true); }
     };
-    document.getElementById('dCartPart').onclick = async () => {
+    document.getElementById('dSchedBtn').onclick = async () => {
+      const v = document.getElementById('dSched').value;
+      if (!v) return toast('일시 선택', true);
+      try {
+        const r = await api('/hq/tickets/' + id + '/schedule', { method: 'POST', body: JSON.stringify({ scheduled_at: new Date(v).toISOString() }) });
+        toast(r.conflict_warning ? '일정 저장 (충돌 경고)' : '일정 저장');
+      } catch (e) { toast(e.message, true); }
+    };
+    document.getElementById('dFin').onclick = async () => {
+      try {
+        const r = await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ region_id: document.getElementById('dRegion').value }) });
+        await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
+        toast('출장비 ' + r.travel_fee + '원'); openTicket(id);
+      } catch (e) { toast(e.message, true); }
+    };
+    document.getElementById('dCartPart').onclick = () => {
       showModal('<h3>부품 추가</h3><label>이름</label><input id="cpn" value="부품" />' +
         '<label style="margin-top:8px">수량</label><input id="cpq" type="number" value="1" />' +
         '<label style="margin-top:8px">단가</label><input id="cpp" type="number" value="10000" />' +
@@ -669,6 +717,27 @@
       await api('/hq/tickets/' + id + '/cart/sync-travel', { method: 'POST', body: '{}' });
       toast('출장비 동기화'); refreshAsgCart();
     };
+    const nb = document.getElementById('dNext');
+    nb.innerHTML = next.map((s) => '<button class="btn btn-sm" type="button" data-to="' + s + '">' + (STATUS[s] || s) + '</button>').join('') || '<span class="muted">전이 없음</span>';
+    nb.querySelectorAll('button[data-to]').forEach((b) => b.onclick = async () => {
+      const to = b.dataset.to;
+      let cancel_reason = '';
+      if (to === 'cancelled') {
+        cancel_reason = window.prompt('취소 사유') || '';
+        if (!cancel_reason) return toast('취소 사유 필수', true);
+      }
+      try {
+        await api('/hq/tickets/' + id + '/transition', { method: 'POST', body: JSON.stringify({ to, cancel_reason }) });
+        toast('상태 → ' + (STATUS[to] || to)); openTicket(id);
+      } catch (e) { toast(e.message, true); }
+    });
+    document.getElementById('dSettle').innerHTML = settleOpts.map((s) =>
+      '<button class="btn btn-sm" type="button" data-st="' + s + '">' + s + '</button>'
+    ).join('');
+    document.getElementById('dSettle').querySelectorAll('button').forEach((b) => b.onclick = async () => {
+      await api('/hq/tickets/' + id + '/finance', { method: 'POST', body: JSON.stringify({ settlement_status: b.dataset.st }) });
+      toast(b.dataset.st); openTicket(id);
+    });
     document.getElementById('dDoc').onclick = async () => {
       try {
         const cart = await api('/hq/tickets/' + id + '/cart');
@@ -695,121 +764,188 @@
     };
   }
 
-  // ----- Schedule: staff first -----
-  async function renderSchedule() {
-    await loadStaff();
-    const el = document.getElementById('p-schedule');
-    el.innerHTML = `
-      <div class="card">
-        <h3>스케줄 — 직원 선택 후 일정 부여</h3>
-        <div class="row">
-          <div class="grow"><label>직원</label><select id="schStaff">${staffOptions()}</select></div>
-          <div class="grow"><label>날짜</label><input id="schDate" type="date" value="${new Date().toISOString().slice(0,10)}" /></div>
-          <button class="btn btn-primary" type="button" id="schLoad">조회</button>
-        </div>
-      </div>
-      <div class="card"><h3>이 직원 일정</h3><div id="schList"></div></div>
-      <div class="card"><h3>미배정/미일정 티켓 → 이 직원에 부여</h3><div id="schPool"></div></div>`;
-    document.getElementById('schLoad').onclick = loadSch;
-    await loadSch();
-  }
-  async function loadSch() {
-    const sid = document.getElementById('schStaff').value;
-    const day = document.getElementById('schDate').value;
-    const data = await api('/hq/schedule?date=' + encodeURIComponent(day));
-    const mine = (data.tickets || []).filter((t) => !sid || t.assignee_id === sid);
-    const conflicts = (data.conflicts || []).filter((c) => !sid || c.assignee_id === sid);
-    let html = '';
-    if (conflicts.length) html += '<div class="empty" style="color:#ff8a95;margin-bottom:8px">충돌 경고 ' + conflicts.length + '건 (저장은 됨)</div>';
-    html += mine.length
-      ? '<table><thead><tr><th>시각</th><th>번호</th><th>상태</th></tr></thead><tbody>' +
-        mine.map((t) => '<tr class="clickable" data-id="' + esc(t.ticket_id) + '"><td class="mono">' + esc(t.scheduled_at) +
-          '</td><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) + '</td></tr>').join('') + '</tbody></table>'
-      : '<div class="empty">일정 없음</div>';
-    document.getElementById('schList').innerHTML = html;
-    document.querySelectorAll('#schList tr.clickable').forEach((tr) => tr.onclick = () => openTicket(tr.dataset.id));
-
-    const all = await api('/hq/tickets');
-    const pool = all.filter((t) => t.status !== 'closed' && t.status !== 'cancelled' && (!t.scheduled_at || t.assignee_id !== sid));
-    document.getElementById('schPool').innerHTML = pool.length
-      ? '<table><thead><tr><th>번호</th><th>상태</th><th>증상</th><th>부여</th></tr></thead><tbody>' +
-        pool.slice(0, 30).map((t) => '<tr><td class="mono">' + esc(t.number) + '</td><td>' + badge(t.status) +
-          '</td><td>' + esc(t.symptom) + '</td><td><button class="btn btn-sm btn-primary" type="button" data-give="' +
-          esc(t.ticket_id) + '">이 직원에게</button></td></tr>').join('') + '</tbody></table>'
-      : '<div class="empty">부여할 티켓 없음</div>';
-    document.querySelectorAll('[data-give]').forEach((b) => b.onclick = async () => {
-      if (!sid) return toast('직원 먼저 선택', true);
-      const when = prompt('방문일시 (YYYY-MM-DDTHH:mm)', day + 'T10:00');
-      if (!when) return;
-      try {
-        await api('/hq/tickets/' + b.dataset.give + '/assign', { method: 'POST', body: JSON.stringify({ assignee_id: sid }) });
-        const r = await api('/hq/tickets/' + b.dataset.give + '/schedule', { method: 'POST', body: JSON.stringify({ scheduled_at: new Date(when).toISOString() }) });
-        toast(r.conflict_warning ? '부여됨 (충돌 경고)' : '부여됨');
-        loadSch();
-      } catch (e) { toast(e.message, true); }
-    });
-  }
-
-  // ----- Customers / Equipment / Users -----
   async function renderCustomers() {
     const el = document.getElementById('p-customers');
-    el.innerHTML = `<div class="card"><div class="row"><div class="grow"><label>전화 검색</label>
-      <input id="csPhone" placeholder="비우면 전체" /></div>
-      <button class="btn btn-primary" type="button" id="csBtn">검색</button></div>
-      <div id="csList" style="margin-top:10px"></div></div>`;
+    el.innerHTML = `<div class="card"><div class="row">
+      <div class="grow"><label>검색 (번호·상호)</label><input id="csQ" /></div>
+      <button class="btn btn-primary" type="button" id="csBtn">검색</button>
+      <button class="btn" type="button" id="csNew">새 고객</button>
+    </div><div id="csList" style="margin-top:10px"></div></div>
+    <div id="csEditor"></div>`;
     const run = async () => {
-      const phone = document.getElementById('csPhone').value.trim();
-      const rows = await api('/hq/customers' + (phone ? ('?phone=' + encodeURIComponent(phone)) : ''));
+      const q = document.getElementById('csQ').value.trim();
+      const rows = await api('/hq/customers' + (q ? ('?q=' + encodeURIComponent(q)) : ''));
       document.getElementById('csList').innerHTML = rows.length
         ? '<table><thead><tr><th>표시명</th><th>전화</th><th>주소</th><th>상태</th></tr></thead><tbody>' +
           rows.map((c) => '<tr class="clickable" data-id="' + esc(c.customer_id) + '"><td>' + esc(c.display_name) +
             '</td><td class="mono">' + esc(c.primary_phone) + '</td><td>' + esc(c.address) + '</td><td>' +
             esc(c.status) + '</td></tr>').join('') + '</tbody></table>'
         : '<div class="empty">없음</div>';
-      document.querySelectorAll('#csList tr.clickable').forEach((tr) => tr.onclick = () => openCustomerHub(tr.dataset.id));
+      document.querySelectorAll('#csList tr.clickable').forEach((tr) => tr.onclick = () => openCustomerEditor(tr.dataset.id));
     };
     document.getElementById('csBtn').onclick = run;
+    document.getElementById('csNew').onclick = () => openCustomerEditor(null);
     await run();
   }
 
-  async function openCustomerHub(id) {
-    const hub = await api('/hq/customers/' + encodeURIComponent(id) + '/hub');
-    const c = hub.customer;
-    showModal(
-      '<h3>고객 허브</h3><p><b>' + esc(c.display_name) + '</b> ' + esc(c.primary_phone) + '</p>' +
-      '<p class="muted">' + esc(c.address) + '</p>' +
-      '<label>전화 변경</label><div class="row"><input id="hubPhone" value="' + esc(c.primary_phone) + '" /><button class="btn btn-primary" type="button" id="hubSave">저장</button></div>' +
-      '<h4 style="margin-top:10px">장비</h4><ul>' + (hub.equipment || []).map((e) => '<li>' + esc(e.name) + ' @ ' + esc(e.location_note) + '</li>').join('') + '</ul>' +
-      '<h4>티켓</h4><ul>' + (hub.tickets || []).map((t) => '<li class="mono">' + esc(t.number) + ' ' + esc(t.status) + '</li>').join('') + '</ul>' +
-      '<div class="actions"><button class="btn" type="button" id="hubClose">닫기</button>' +
-      '<button class="btn btn-primary" type="button" id="hubDesk">이 고객으로 데스크</button></div>'
-    );
-    document.getElementById('hubClose').onclick = closeModal;
-    document.getElementById('hubSave').onclick = async () => {
+  async function openCustomerEditor(id) {
+    await loadStaff(); await loadRegions();
+    let c = { type: 'shop', status: 'active' };
+    let extra = { region_id: '', grade: '', settle_memo: '', warranty_memo: '' };
+    let hub = { equipment: [], tickets: [], phones: [] };
+    let hint = { warranty: 'paid', reason: 'no_purchase_or_expired' };
+    let purchases = [];
+    if (id) {
+      c = await api('/hq/customers/' + encodeURIComponent(id));
+      extra = await api('/hq/customers/' + encodeURIComponent(id) + '/extra');
+      hub = await api('/hq/customers/' + encodeURIComponent(id) + '/hub');
+      hint = await api('/hq/warranty-hint?customer_id=' + encodeURIComponent(id));
+      purchases = await api('/hq/purchases?customer_id=' + encodeURIComponent(id));
+    }
+    const el = document.getElementById('csEditor');
+    el.innerHTML = `<div class="card">
+      <h3>고객 카드 ${id ? '' : '(신규)'}</h3>
+      <div class="row">
+        <div><label>유형 *</label><select id="fType">
+          <option value="franchise">가맹</option><option value="direct">직영</option>
+          <option value="shop">일반매장</option><option value="other">개인/기타</option></select></div>
+        <div class="grow"><label>표시명 *</label><input id="fName" value="${esc(c.display_name || '')}" /></div>
+        <div><label>상태 *</label><select id="fStatus">
+          <option value="active">거래중</option><option value="dormant">휴면</option><option value="closed">종료</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>대표전화 *</label><input id="fPhone" value="${esc(c.primary_phone || '')}" ${id ? 'readonly' : ''} /></div>
+        <div class="grow"><label>주소 *</label><input id="fAddr" value="${esc(c.address || '')}" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>공식상호</label><input id="fLegal" value="${esc(c.legal_name || '')}" /></div>
+        <div class="grow"><label>추가전화</label><input id="fExtra" value="${esc(c.extra_phone || '')}" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>현장담당</label><input id="fContact" value="${esc(c.contact_name || '')}" /></div>
+        <div class="grow"><label>담당자폰</label><input id="fCPhone" value="${esc(c.contact_phone || '')}" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>권역</label><select id="fRegion">${regionOptions(extra.region_id || '')}</select></div>
+        <div class="grow"><label>본사고객담당</label><select id="fOwner">${staffOptions(c.account_owner_user_id || '')}</select></div>
+        <div><label>등급</label><select id="fGrade">
+          <option value="">-</option><option value="normal">일반</option><option value="caution">주의</option><option value="VIP">VIP</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>방문메모</label><input id="fVisit" value="${esc(c.visit_note || '')}" /></div>
+        <div class="grow"><label>영업시간</label><input id="fHours" value="${esc(c.hours_note || '')}" /></div>
+        <div class="grow"><label>태그</label><input id="fTags" value="${esc(c.tags || '')}" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>정산메모</label><input id="fSettle" value="${esc(extra.settle_memo || '')}" /></div>
+        <div class="grow"><label>보증메모</label><input id="fWarr" value="${esc(extra.warranty_memo || '')}" /></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="button" id="fSave">저장</button>
+        <button class="btn" type="button" id="fSaveGo">저장 후 출장</button>
+        <button class="btn" type="button" id="fSaveConsult">저장 후 상담종결</button>
+      </div>
+      <div style="margin-top:10px" class="badge">${hint.warranty === 'free' ? '무상 가능' : '유상'} · ${esc(hint.reason || '')}</div>
+      <h4 style="margin-top:14px">장비</h4>
+      <div id="fEq"></div>
+      <div class="row" style="margin-top:8px">
+        <div class="grow"><label>장비명 *</label><input id="fEqName" /></div>
+        <div class="grow"><label>위치 *</label><input id="fEqLoc" /></div>
+        <button class="btn btn-primary" type="button" id="fEqAdd">장비 추가</button>
+      </div>
+      <h4 style="margin-top:14px">구매확정</h4>
+      <div id="fPur"></div>
+      <div class="actions"><button class="btn btn-primary" type="button" id="fPurAdd">구매확정 추가</button></div>
+    </div>`;
+    document.getElementById('fType').value = c.type || 'shop';
+    document.getElementById('fStatus').value = c.status || 'active';
+    document.getElementById('fGrade').value = extra.grade || '';
+    document.getElementById('fEq').innerHTML = (hub.equipment || []).length
+      ? '<table><thead><tr><th>이름</th><th>위치</th></tr></thead><tbody>' +
+        hub.equipment.map((e) => '<tr><td>' + esc(e.name) + '</td><td>' + esc(e.location_note) + '</td></tr>').join('') + '</tbody></table>'
+      : '<div class="muted">장비 없음</div>';
+    document.getElementById('fPur').innerHTML = purchases.length
+      ? '<table><thead><tr><th>상품</th><th>유형</th><th>확정일</th></tr></thead><tbody>' +
+        purchases.map((p) => '<tr><td class="mono">' + esc(p.product_id) + '</td><td>' + esc(p.fulfill_type) +
+          '</td><td>' + esc(p.confirm_date) + '</td></tr>').join('') + '</tbody></table>'
+      : '<div class="muted">구매확정 없음</div>';
+
+    const collect = () => ({
+      type: document.getElementById('fType').value,
+      display_name: document.getElementById('fName').value.trim(),
+      primary_phone: document.getElementById('fPhone').value.trim(),
+      address: document.getElementById('fAddr').value.trim(),
+      status: document.getElementById('fStatus').value,
+      legal_name: document.getElementById('fLegal').value.trim(),
+      extra_phone: document.getElementById('fExtra').value.trim(),
+      contact_name: document.getElementById('fContact').value.trim(),
+      contact_phone: document.getElementById('fCPhone').value.trim(),
+      visit_note: document.getElementById('fVisit').value.trim(),
+      hours_note: document.getElementById('fHours').value.trim(),
+      tags: document.getElementById('fTags').value.trim(),
+      account_owner_user_id: document.getElementById('fOwner').value,
+      region_id: document.getElementById('fRegion').value,
+      grade: document.getElementById('fGrade').value,
+      settle_memo: document.getElementById('fSettle').value.trim(),
+      warranty_memo: document.getElementById('fWarr').value.trim()
+    });
+
+    const persist = async () => {
+      const body = collect();
+      if (!body.display_name || !body.primary_phone || !body.address) throw new Error('필수 항목 확인');
+      if (id) {
+        await api('/hq/customers/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        return id;
+      }
+      const created = await api('/hq/customers', { method: 'POST', body: JSON.stringify(body) });
+      return created.customer_id;
+    };
+
+    document.getElementById('fSave').onclick = async () => {
+      try { const cid = await persist(); toast('저장'); openCustomerEditor(cid); }
+      catch (e) { toast(e.message, true); }
+    };
+    document.getElementById('fSaveGo').onclick = async () => {
       try {
-        await api('/hq/customers/' + id + '/phone', { method: 'POST', body: JSON.stringify({ primary_phone: document.getElementById('hubPhone').value.trim() }) });
-        toast('전화 변경'); closeModal(); refresh();
+        const cid = await persist();
+        toast('저장 — 데스크로');
+        const cust = await api('/hq/customers/' + cid);
+        showPanel('desk');
+        setTimeout(async () => {
+          document.getElementById('deskQ').value = cust.primary_phone;
+          await deskSearch();
+        }, 50);
       } catch (e) { toast(e.message, true); }
     };
-    document.getElementById('hubDesk').onclick = () => {
-      closeModal(); showPanel('desk');
-      setTimeout(async () => {
-        document.getElementById('deskPhone').value = c.primary_phone;
-        await deskSearch();
-      }, 50);
+    document.getElementById('fSaveConsult').onclick = async () => {
+      try {
+        const cid = await persist();
+        const cust = await api('/hq/customers/' + cid);
+        await api('/hq/calls', { method: 'POST', body: JSON.stringify({
+          phone: cust.primary_phone, call_type: 'other', memo: '저장 후 상담종결', customer_id: cid
+        })});
+        toast('상담종결 로그');
+      } catch (e) { toast(e.message, true); }
     };
-    // purchase confirm
-    const buyBtn = document.createElement('button');
-    buyBtn.className = 'btn btn-primary';
-    buyBtn.type = 'button';
-    buyBtn.textContent = '구매확정';
-    buyBtn.onclick = async () => {
+    document.getElementById('fEqAdd').onclick = async () => {
+      if (!id) return toast('고객 먼저 저장', true);
+      const name = document.getElementById('fEqName').value.trim();
+      const location_note = document.getElementById('fEqLoc').value.trim();
+      if (!name || !location_note) return toast('장비명·위치 필수', true);
+      await api('/hq/equipment', { method: 'POST', body: JSON.stringify({ customer_id: id, name, location_note }) });
+      toast('장비 추가'); openCustomerEditor(id);
+    };
+    document.getElementById('fPurAdd').onclick = async () => {
+      if (!id) return toast('고객 먼저 저장', true);
       const products = await api('/hq/products');
-      if (!products.length) return toast('먼저 사내몰 상품 등록', true);
+      const eqs = hub.equipment || [];
+      if (!products.length) return toast('사내몰 상품 먼저', true);
       showModal('<h3>구매확정</h3><label>상품</label><select id="bp">' +
         products.map((p) => '<option value="' + esc(p.product_id) + '">' + esc(p.name) + '</option>').join('') +
         '</select><label style="margin-top:8px">유형</label><select id="bf"><option value="ship">발송</option><option value="install">설치</option></select>' +
-        '<label style="margin-top:8px">확정일</label><input id="bd" type="date" value="' + new Date().toISOString().slice(0,10) + '" />' +
+        '<label style="margin-top:8px">확정일 수기</label><input id="bd" type="date" value="' + new Date().toISOString().slice(0,10) + '" />' +
+        '<label style="margin-top:8px">장비 연결</label><select id="be"><option value="">없음</option>' +
+        eqs.map((e) => '<option value="' + esc(e.equipment_id) + '">' + esc(e.name) + '</option>').join('') + '</select>' +
         '<div class="actions"><button class="btn" type="button" id="bx">취소</button><button class="btn btn-primary" type="button" id="bs">저장</button></div>');
       document.getElementById('bx').onclick = closeModal;
       document.getElementById('bs').onclick = async () => {
@@ -817,13 +953,16 @@
           customer_id: id,
           product_id: document.getElementById('bp').value,
           fulfill_type: document.getElementById('bf').value,
-          confirm_date: document.getElementById('bd').value
+          confirm_date: document.getElementById('bd').value,
+          equipment_id: document.getElementById('be').value
         })});
-        toast('구매확정 저장'); closeModal();
+        toast('구매확정'); closeModal(); openCustomerEditor(id);
       };
     };
-    document.querySelector('#modalBody .actions').appendChild(buyBtn);
   }
+
+  async function openCustomerHub(id) { return openCustomerEditor(id); }
+
 
   async function renderEquipment() {
     const el = document.getElementById('p-equipment');

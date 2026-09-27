@@ -191,19 +191,30 @@
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
       (json-err (get $gate "status") (get $gate "error"))
-      (let [$phone (?? (server-req-query $req "phone") "")
-            $company (cid $gate)]
-        (if (= $phone "")
-          (json-ok (db-rows (db-query "hq_customers" {"company_id" $company})))
-          (let [$direct (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $phone}))
-                $hist (db-rows (db-query "hq_phone_history" {"company_id" $company "phone" $phone}))]
-            (if (> (length $direct) 0)
-              (json-ok $direct)
-              (if (= (length $hist) 0)
-                (json-ok [])
-                (let [$cid0 (get (get $hist 0) "customer_id")
-                      $c (db-row (db-get-row "hq_customers" $cid0))]
-                  (json-ok (if (nil? $c) [] [$c])))))))))))
+      (let [$q (?? (server-req-query $req "q") (?? (server-req-query $req "phone") ""))
+            $company (cid $gate)
+            $all (db-rows (db-query "hq_customers" {"company_id" $company}))]
+        (if (= $q "")
+          (json-ok $all)
+          (let [$direct (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $q}))
+                $hist (db-rows (db-query "hq_phone_history" {"company_id" $company "phone" $q}))
+                $by-hist (if (= (length $hist) 0)
+                           []
+                           (let [$c (db-row (db-get-row "hq_customers" (get (get $hist 0) "customer_id")))]
+                             (if (nil? $c) [] [$c])))
+                $by-name (filter (fn [$c]
+                                   (>= (str-index-of (?? (get $c "display_name") "") $q) 0))
+                                 $all)
+                $by-legal (filter (fn [$c]
+                                   (>= (str-index-of (?? (get $c "legal_name") "") $q) 0))
+                                 $all)
+                $merged (reduce (fn [$acc $c]
+                                  (let [$id (get $c "customer_id")
+                                        $exists (filter (fn [$x] (= (get $x "customer_id") $id)) $acc)]
+                                    (if (> (length $exists) 0) $acc (append $acc [$c]))))
+                                []
+                                (concat (concat $direct $by-hist) (concat $by-name $by-legal)))]
+            (json-ok $merged)))))))
 
 (defn handle-customer-create [$req]
   (let [$gate (require-user $req)]
@@ -214,42 +225,52 @@
             $phone (?? (get $body "primary_phone") "")
             $name (?? (get $body "display_name") "")
             $type (?? (get $body "type") "shop")]
-        (if (or (= $name "") (not (valid-phone? $phone)))
-          (json-err 400 "display_name and primary_phone required")
-          (let [$dup (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $phone}))]
-            (if (> (length $dup) 0)
-              (json-err 409 "primary_phone already exists")
-              (let [$id (new-id "cust")
-                    $now (iso-now)
-                    $row {"customer_id" $id
-                          "company_id" $company
-                          "type" $type
-                          "display_name" $name
-                          "legal_name" (?? (get $body "legal_name") "")
-                          "primary_phone" $phone
-                          "extra_phone" (?? (get $body "extra_phone") "")
-                          "contact_name" (?? (get $body "contact_name") "")
-                          "contact_phone" (?? (get $body "contact_phone") "")
-                          "address" (?? (get $body "address") "")
-                          "visit_note" (?? (get $body "visit_note") "")
-                          "status" "active"
-                          "account_owner_user_id" (?? (get $body "account_owner_user_id") "")
-                          "tags" (?? (get $body "tags") "")
-                          "hours_note" (?? (get $body "hours_note") "")
-                          "created_at" $now
-                          "updated_at" $now}
-                    $ins (db-insert "hq_customers" $row)]
-                (if (not (get $ins "ok"))
-                  (json-err 500 (?? (get $ins "message") "customer create failed"))
-                  (do
-                    (db-insert "hq_phone_history"
-                               {"history_id" (new-id "ph")
-                                "company_id" $company
-                                "customer_id" $id
-                                "phone" $phone
-                                "kind" "primary"
-                                "changed_at" $now})
-                    (json-created $row)))))))))))
+        (let [$addr (?? (get $body "address") "")]
+          (if (or (= $name "") (not (valid-phone? $phone)) (= $addr ""))
+            (json-err 400 "display_name, primary_phone, address required")
+            (let [$dup (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $phone}))]
+              (if (> (length $dup) 0)
+                (json-err 409 "primary_phone already exists")
+                (let [$id (new-id "cust")
+                      $now (iso-now)
+                      $st (?? (get $body "status") "active")
+                      $row {"customer_id" $id
+                            "company_id" $company
+                            "type" $type
+                            "display_name" $name
+                            "legal_name" (?? (get $body "legal_name") "")
+                            "primary_phone" $phone
+                            "extra_phone" (?? (get $body "extra_phone") "")
+                            "contact_name" (?? (get $body "contact_name") "")
+                            "contact_phone" (?? (get $body "contact_phone") "")
+                            "address" $addr
+                            "visit_note" (?? (get $body "visit_note") "")
+                            "status" $st
+                            "account_owner_user_id" (?? (get $body "account_owner_user_id") "")
+                            "tags" (?? (get $body "tags") "")
+                            "hours_note" (?? (get $body "hours_note") "")
+                            "created_at" $now
+                            "updated_at" $now}
+                      $ins (db-insert "hq_customers" $row)]
+                  (if (not (get $ins "ok"))
+                    (json-err 500 (?? (get $ins "message") "customer create failed"))
+                    (do
+                      (db-insert "hq_phone_history"
+                                 {"history_id" (new-id "ph")
+                                  "company_id" $company
+                                  "customer_id" $id
+                                  "phone" $phone
+                                  "kind" "primary"
+                                  "changed_at" $now})
+                      (db-insert "hq_customer_extra"
+                                 {"customer_id" $id
+                                  "company_id" $company
+                                  "region_id" (?? (get $body "region_id") "")
+                                  "grade" (?? (get $body "grade") "")
+                                  "settle_memo" (?? (get $body "settle_memo") "")
+                                  "warranty_memo" (?? (get $body "warranty_memo") "")
+                                  "updated_at" $now})
+                      (json-created $row))))))))))))
 
 (defn handle-customer-get [$req]
   (let [$gate (require-user $req)]
@@ -808,7 +829,9 @@
 (server-post "/hq/purchases" "handle-purchase-create")
 (server-get "/hq/purchases" "handle-purchases-list")
 (server-get "/hq/warranty-hint" "handle-warranty-hint")
+(server-get "/hq/customers/:id/extra" "handle-customer-extra-get")
 (server-post "/hq/customers/:id/extra" "handle-customer-extra-set")
+(server-put "/hq/customers/:id" "handle-customer-update")
 (server-get "/hq/tickets/:id/assignees" "handle-assignees-list")
 (server-post "/hq/tickets/:id/assignees" "handle-assignees-set")
 (server-get "/hq/tickets/:id/cart" "handle-cart-list")
