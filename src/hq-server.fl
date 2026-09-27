@@ -187,6 +187,10 @@
               (db-patch "hq_users" $id {"employment_status" $status "updated_at" (iso-now)})
               (json-ok {"user_id" $id "employment_status" $status}))))))))
 
+(defn digits-only [$s]
+  ;; 전화 부분검색용: 하이픈/공백/점 제거
+  (str-replace (str-replace (str-replace (?? $s "") "-" "") " " "") "." ""))
+
 (defn handle-customers-search [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
@@ -196,12 +200,20 @@
             $all (db-rows (db-query "hq_customers" {"company_id" $company}))]
         (if (= $q "")
           (json-ok $all)
-          (let [$direct (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $q}))
+          (let [$q-digits (digits-only $q)
+                $direct (db-rows (db-query "hq_customers" {"company_id" $company "primary_phone" $q}))
                 $hist (db-rows (db-query "hq_phone_history" {"company_id" $company "phone" $q}))
                 $by-hist (if (= (length $hist) 0)
                            []
                            (let [$c (db-row (db-get-row "hq_customers" (get (get $hist 0) "customer_id")))]
                              (if (nil? $c) [] [$c])))
+                $by-phone (if (= $q-digits "")
+                            []
+                            (filter (fn [$c]
+                                      (or (>= (str-index-of (digits-only (?? (get $c "primary_phone") "")) $q-digits) 0)
+                                          (>= (str-index-of (digits-only (?? (get $c "extra_phone") "")) $q-digits) 0)
+                                          (>= (str-index-of (digits-only (?? (get $c "contact_phone") "")) $q-digits) 0)))
+                                    $all))
                 $by-name (filter (fn [$c]
                                    (>= (str-index-of (?? (get $c "display_name") "") $q) 0))
                                  $all)
@@ -213,7 +225,8 @@
                                         $exists (filter (fn [$x] (= (get $x "customer_id") $id)) $acc)]
                                     (if (> (length $exists) 0) $acc (append $acc [$c]))))
                                 []
-                                (concat (concat $direct $by-hist) (concat $by-name $by-legal)))]
+                                (concat (concat (concat $direct $by-hist) $by-phone)
+                                        (concat $by-name $by-legal)))]
             (json-ok $merged)))))))
 
 (defn handle-customer-create [$req]
