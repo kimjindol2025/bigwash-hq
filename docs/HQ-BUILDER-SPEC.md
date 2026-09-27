@@ -126,3 +126,10 @@ ticket_id, user_id nullable, contractor_name, kind, is_primary, day_pay_amount
 
 레거시 고객입구가 꺼지고, 구매확정·N배정·용병수기·실파일 명세·권역출장비가 본사 화면에서 한 줄로 이어지면 1차 끝.  
 직원 앱을 이 레포에 넣는 순간 지시 위반이다.
+
+## 명세 파일 1차 산출물
+
+- `pdf_base64`: `%PDF` 매직의 실제 PDF 바이트
+- `image_png_base64`: 세로 PNG 바이트 (`public/hq/assets/doc-portrait.png`)
+- `content`: 동일 본문 + 계좌 한 줄 (양쪽 공통)
+- `image_svg`: 세로 이미지 **추가 대체본** (카톡 등에서 SVG 필요할 때)

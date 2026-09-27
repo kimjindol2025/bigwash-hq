@@ -384,6 +384,11 @@
                       $num (ticket-number)
                       $now (iso-now)
                       $repeat (if (detect-repeat? $company $eq) "true" "false")
+                      $extra (db-row (db-get-row "hq_customer_extra" $cust))
+                      $region-req (?? (get $body "region_id") "")
+                      $region (if (not (= $region-req ""))
+                                $region-req
+                                (if (nil? $extra) "" (?? (get $extra "region_id") "")))
                       $row {"ticket_id" $id
                             "company_id" $company
                             "number" $num
@@ -415,10 +420,8 @@
                       (meta-set-created! $company $id)
                       (finance-upsert! $company $id
                                        {"ticket_type" (?? (get $body "ticket_type") "dispatch")
-                                        "region_id" (?? (get $body "region_id") "")
-                                        "travel_fee" (if (= (?? (get $body "region_id") "") "")
-                                                       0
-                                                       (region-fee (get $body "region_id")))
+                                        "region_id" $region
+                                        "travel_fee" (if (= $region "") 0 (region-fee $region))
                                         "settlement_status" ""})
                       (add-event! $company $id (uid $gate) "created" "" $status "접수")
                       (if (not (= $assignee ""))
@@ -818,6 +821,11 @@
 (server-get "/register.html" "handle-legacy-gone")
 (server-get "/customer" "handle-legacy-gone")
 (server-get "/customer.html" "handle-legacy-gone")
+(server-get "/login.html" "handle-legacy-gone")
+(server-get "/dashboard.html" "handle-legacy-gone")
+(server-get "/admin" "handle-legacy-gone")
+(server-get "/admin/login.html" "handle-legacy-gone")
+(server-get "/admin/dashboard.html" "handle-legacy-gone")
 (server-post "/as/register" "handle-legacy-gone")
 (server-get "/customer/requests" "handle-legacy-gone")
 

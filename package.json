@@ -10,7 +10,7 @@
     "test": "bash tests/hq-spec19-acceptance.sh && bash tests/hq-spec20-acceptance.sh",
     "test:hq19": "bash tests/hq-spec19-acceptance.sh",
     "test:hq20": "bash tests/hq-spec20-acceptance.sh",
-    "start:legacy-node": "node server.js",
+    "start:legacy-node": "node legacy/server.js",
     "test:legacy": "node tests/run.js"
   },
   "dependencies": {

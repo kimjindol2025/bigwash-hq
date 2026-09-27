@@ -82,8 +82,11 @@ DOC=$(curl -sS -X POST "$BASE/hq/documents" -H "$AUTH" -H 'content-type: applica
   -d "{\"ticket_id\":\"$TID\",\"doc_type\":\"invoice\",\"labor_fee\":10000,\"lines\":[{\"name\":\"노즐\",\"qty\":1,\"price\":5000}]}")
 DID=$(echo "$DOC" | j 'print(d["doc_id"])')
 DL=$(curl -sS "$BASE/hq/documents/$DID/download?format=pdf" -H "$AUTH")
-echo "$DL" | j 'assert d.get("pdf_base64") and d.get("image_svg") and d.get("content") and "입금계좌" in d["content"]'
-pass "15 pdf_base64 + image_svg + same content"
+echo "$DL" | j 'assert d.get("pdf_base64") and d.get("image_png_base64") and d.get("content") and "입금계좌" in d["content"]'
+# pdf magic in base64 of %PDF
+echo "$DL" | j 'import base64; assert base64.b64decode(d["pdf_base64"][:16]).startswith(b"%PDF")'
+echo "$DL" | j 'import base64; assert base64.b64decode(d["image_png_base64"][:16]).startswith(b"\x89PNG")'
+pass "15 real PDF bytes + PNG bytes + content"
 
 # 16 unpaid badge text
 curl -sS -X POST "$BASE/hq/tickets/$TID/finance" -H "$AUTH" -H 'content-type: application/json' \
@@ -98,20 +101,20 @@ c2=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/customer.html")
 c3=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/as/register" -H 'content-type: application/json' -d '{}')
 [[ "$c1" == "404" && "$c2" == "404" && "$c3" == "404" ]] && pass "17 legacy routes 404" || fail "17" "codes $c1 $c2 $c3"
 
-# 18 README HQ
-grep -q '본사' /home/kim/kim/projects/bigwash-as/README.md && grep -q '/hq/login.html' /home/kim/kim/projects/bigwash-as/README.md \
+# 18 README HQ (repo-relative)
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+grep -q '본사' "$ROOT/README.md" && grep -q '/hq/login.html' "$ROOT/README.md" \
   && pass "18 README HQ entry" || fail "18" "README"
 
-# 19 region copy — customer extra region used when creating ticket with region from extra
-# (ticket created with region_id already above; assert extra saved)
+# 19 region auto-copy — omit region_id on ticket create; must copy from customer extra
 EX=$(curl -sS -X POST "$BASE/hq/customers/$CID/extra" -H "$AUTH" -H 'content-type: application/json' -d '{"region_id":"reg-incheon"}')
 echo "$EX" | j 'assert d.get("region_id")=="reg-incheon"'
 TKR=$(curl -sS -X POST "$BASE/hq/tickets" -H "$AUTH" -H 'content-type: application/json' \
-  -d "{\"customer_id\":\"$CID\",\"equipment_id\":\"$EID\",\"symptom\":\"권역복사\",\"region_id\":\"reg-incheon\"}")
+  -d "{\"customer_id\":\"$CID\",\"equipment_id\":\"$EID\",\"symptom\":\"권역자동복사\"}")
 TIDR=$(echo "$TKR" | j 'print(d["ticket_id"])')
-FIN=$(curl -sS -X POST "$BASE/hq/tickets/$TIDR/finance" -H "$AUTH" -H 'content-type: application/json' -d '{"region_id":"reg-incheon"}')
+FIN=$(curl -sS "$BASE/hq/tickets/$TIDR/finance" -H "$AUTH")
 echo "$FIN" | j 'assert d.get("region_id")=="reg-incheon" and d.get("travel_fee")==35000'
-pass "19 customer region → ticket travel fee"
+pass "19 customer region auto-copy on ticket create"
 
 # 20 resigned + contractor past kept
 curl -sS -X PUT "$BASE/hq/users/$STAFF_ID" -H "$AUTH" -H 'content-type: application/json' -d '{"employment_status":"resigned"}' >/dev/null

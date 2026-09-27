@@ -1,32 +1,32 @@
-# 구현 상태 — bigwash-hq 정본
+# 구현 상태 — 검수 잔여 지시 반영
 
-정본: [`HQ-BUILDER-SPEC.md`](HQ-BUILDER-SPEC.md)  
-검증: `npm run test:hq19` + `npm run test:hq20`
+정본: [`HQ-BUILDER-SPEC.md`](HQ-BUILDER-SPEC.md)
 
-## 수락 테스트
+## 수락
 
-| 범위 | 결과 |
-|------|------|
-| §19 / test:hq19 (1–10) | **PASS 10/10** |
-| §20 / test:hq20 (11–20) | **PASS 10/10** |
+| 스위트 | 결과 |
+|--------|------|
+| test:hq19 (1–10) | 유지 |
+| test:hq20 (11–20) | **PASS 10/10** (권역 자동복사·실 PDF/PNG 매직 포함) |
 
-## §1 차단 정리
+## 검수 “남은 빌더 지시” 반영
 
-- README 본사 HQ 전용, 진입 `/hq/login.html`
-- `register.html` / `customer.html` → `legacy/public/`, HQ 라우트 **404**
-- `COMPLETION_REPORT` / `PHASE2_ROADMAP` LEGACY 표시
-- `npm start` = `hq-server.fl` only
-- `npm test` = hq19+hq20 (레거시 44테스트 아님)
-- 로그인 화면 실비밀번호 문구 제거
+| # | 지시 | 상태 |
+|---|------|------|
+| 1 | `login.html`/`dashboard.html` → legacy + HQ 404 | **됨** |
+| 2 | `server.js`/`v9` → legacy | **됨** |
+| 3 | 명세 PDF 실바이트 + PNG | **됨** (`%PDF` / `\x89PNG`). SVG는 추가 대체. PNG는 세로 템플릿+동일 content(고품질 텍스트 래스터 합성은 후속) |
+| 4 | 티켓 생성 시 고객 region 자동복사 테스트 | **됨** (region 생략 요청) |
+| 5 | hq20 README 레포 상대경로 | **됨** |
+| 6 | `.env.example` 실비번 문구 정리 | **됨** |
+| + | `HQ-CRM-AS-REVIEW.md` 비정본 표시 | **됨** |
 
-## 신규 구현
+## 아직 남는 한계 (정직)
 
-- 구매확정 `hq_customer_purchases` + 무상 힌트(확정일+365)
-- N배정 + 용병 `hq_ticket_assignees` / `hq_contractors`
-- 장바구니 `hq_cart_lines` + 권역 출장비 동기화
-- 명세 다운로드 `pdf_base64` + `image_svg` (동일 본문+계좌줄)
-- 고객 `region_id` (`hq_customer_extra`)
+- 테스트는 여전히 **API 중심**. `/hq/app.html` 클릭 스위트는 없음.
+- PNG는 **공유 가능한 실파일 바이트**이나, PDF 본문 전체를 픽셀로 구운 고품질 이미지 합성은 아님.
+- SPEC §4–18 서술 축약은 대화/이 상태문서로 보완 중.
 
 ## 진입
 
-`/hq/login.html` · 시드 계정은 env/`ADMIN_PASSWORD` (문서에 비밀번호 없음)
+`/hq/login.html` only. 옛 `/login.html` 등은 404.

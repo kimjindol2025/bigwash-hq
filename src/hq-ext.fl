@@ -237,22 +237,26 @@
                           $full
                           "</pre></foreignObject></svg>")
                 ;; minimal PDF with Helvetica text stream (same textual content)
+                $stream (str "BT /F1 12 Tf 50 740 Td (" $title ") Tj 0 -20 Td (" (get $d "number") ") Tj 0 -20 Td (Account line included) Tj ET")
                 $pdf (str "%PDF-1.4\n"
                           "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n"
                           "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n"
                           "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
                           "/Contents 4 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj\n"
-                          "4 0 obj<< /Length " (length (str "BT /F1 10 Tf 40 750 Td (" $title ") Tj ET"))
-                          " >>stream\nBT /F1 10 Tf 40 750 Td (" $title " / " (get $d "number") ") Tj ET\nendstream\nendobj\n"
+                          "4 0 obj<< /Length " (length $stream) " >>stream\n" $stream "\nendstream\nendobj\n"
                           "5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n"
-                          "xref\n0 6\n0000000000 65535 f \ntrailer<< /Size 6 /Root 1 0 R >>\nstartxref\n0\n%%EOF")]
+                          "xref\n0 6\n0000000000 65535 f \ntrailer<< /Size 6 /Root 1 0 R >>\nstartxref\n0\n%%EOF")
+                $png-b64-path (str ROOT "/public/hq/assets/doc-portrait.png.b64")
+                $png-b64 (if (file-exists $png-b64-path) (file-read $png-b64-path) "")]
             (json-ok {"doc_id" (get $d "doc_id")
                       "number" (get $d "number")
                       "format" $fmt
                       "title" $title
                       "content" $full
                       "pdf_base64" (base64-encode $pdf)
+                      "image_png_base64" $png-b64
                       "image_svg" $svg
+                      "image_note" "1차: PNG는 세로 템플릿 바이트 + 동일 content 문자열. 고품질 래스터 합성은 후속. SVG는 세로 이미지 대체본."
                       "total" (get $d "total")})))))))
 
 (defn handle-expenses-list [$req]

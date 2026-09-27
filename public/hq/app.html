@@ -681,12 +681,16 @@
         showModal('<h3>' + esc(dl.title) + '</h3><pre class="mono" style="white-space:pre-wrap;font-size:12px;margin:10px 0">' +
           esc(dl.content) + '</pre><div class="actions"><button class="btn" type="button" id="mClose">닫기</button>' +
           '<a class="btn btn-primary" id="mPdf" download="' + esc(doc.number) + '.pdf">PDF</a>' +
-          '<a class="btn btn-primary" id="mSvg" download="' + esc(doc.number) + '.svg">이미지(SVG)</a></div>');
+          '<a class="btn btn-primary" id="mPng" download="' + esc(doc.number) + '.png">PNG</a></div>');
         document.getElementById('mClose').onclick = closeModal;
-        const pdfBin = atob(dl.pdf_base64 || '');
-        const pdfArr = new Uint8Array(pdfBin.length); for (let i = 0; i < pdfBin.length; i++) pdfArr[i] = pdfBin.charCodeAt(i);
-        document.getElementById('mPdf').href = URL.createObjectURL(new Blob([pdfArr], { type: 'application/pdf' }));
-        document.getElementById('mSvg').href = URL.createObjectURL(new Blob([dl.image_svg || ''], { type: 'image/svg+xml' }));
+        function b64ToBlob(b64, type) {
+          const bin = atob(b64 || '');
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          return new Blob([arr], { type: type });
+        }
+        document.getElementById('mPdf').href = URL.createObjectURL(b64ToBlob(dl.pdf_base64, 'application/pdf'));
+        document.getElementById('mPng').href = URL.createObjectURL(b64ToBlob(dl.image_png_base64, 'image/png'));
       } catch (e) { toast(e.message, true); }
     };
   }
