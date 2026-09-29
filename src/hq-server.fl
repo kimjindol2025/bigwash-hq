@@ -683,6 +683,20 @@
   (length (filter (fn [$p] (= (get $p "side") $side))
                   (db-rows (db-query "hq_photos" {"ticket_id" $ticket-id})))))
 
+;; company-wide photo side counts — avoid per-ticket N+1 on followups
+(defn photo-counts-map [$company]
+  (reduce (fn [$acc $p]
+            (let [$tid (?? (get $p "ticket_id") "")
+                  $side (?? (get $p "side") "")
+                  $k (str $tid "|" $side)
+                  $n (+ (?? (get $acc $k) 0) 1)]
+              (assoc $acc $k $n)))
+          {}
+          (db-rows (db-query "hq_photos" {"company_id" $company}))))
+
+(defn photo-count-from-map [$m $tid $side]
+  (?? (get $m (str $tid "|" $side)) 0))
+
 (defn handle-ticket-transition [$req]
   (let [$gate (require-user $req)]
     (if (not (get $gate "ok"))
@@ -969,6 +983,7 @@
             $tickets (db-rows (db-query "hq_tickets" {"company_id" $company}))
             $ctx (list-ctx $company)
             $shown (map (fn [$t] (present-ticket $t $ctx)) $tickets)
+            $pc (photo-counts-map $company)
             $done? (fn [$t]
                      (or (= (get $t "status") "done")
                          (= (get $t "status") "followup")
@@ -976,8 +991,8 @@
             $repeat (filter (fn [$t] (= (?? (get $t "is_repeat") "") "true")) $shown)
             $photo (filter (fn [$t]
                              (and ($done? $t)
-                                  (or (< (count-photos (get $t "ticket_id") "before") 3)
-                                      (< (count-photos (get $t "ticket_id") "after") 3))))
+                                  (or (< (photo-count-from-map $pc (get $t "ticket_id") "before") 3)
+                                      (< (photo-count-from-map $pc (get $t "ticket_id") "after") 3))))
                            $shown)
             $unpaid (filter (fn [$t]
                               (and (= (get $t "status") "done")
